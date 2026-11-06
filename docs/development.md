@@ -193,7 +193,9 @@ Users can import the same ZIP into ME3.
 
 Release builds use separate checkouts for the selected source tag and the workflow
 commit's tooling. Source compilation, tests, clang-tidy, and AddressSanitizer run
-from the unmodified tagged checkout. The workflow's packager can repair old release
+from the unmodified tagged checkout. Sanitizer compilation bypasses sccache so
+historical tags using shared MSVC `/Zi` PDBs keep their original compiler flags
+without cache-wrapper collisions. The workflow's packager can repair old release
 tooling without changing the tagged code. Before attesting, the source validator
 checks both checkout commits and cleanliness, dependency pins and origins, ZIP
 contents, the checksum, and equality with the checked production package.

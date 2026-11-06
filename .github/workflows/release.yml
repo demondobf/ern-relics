@@ -107,6 +107,10 @@ jobs:
           if ($version -cne $env:RELEASE_VERSION) { throw 'Tag and source version do not match.' }
           ./source/tools/check.ps1 -Label dev -Jobs 4 -BuildDirectory "$env:RUNNER_TEMP/release-build"
       - name: Check AddressSanitizer
+        # Historical tags use shared /Zi PDBs, which cannot be safely wrapped by sccache.
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ""
+          CMAKE_CXX_COMPILER_LAUNCHER: ""
         run: ./source/tools/build.ps1 -Preset asan -Jobs 4 -BuildDirectory "$env:RUNNER_TEMP/asan-build"
       - name: Package checked production DLL
         id: package

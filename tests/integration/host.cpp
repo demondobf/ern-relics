@@ -309,13 +309,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR arguments, int show) {
             reinterpret_cast<ReadyFn>(GetProcAddress(dll, "ern_test_fixture_edit_cycle"));
         if (!ready_fn || !stats_fn || (!smoke_test && !edit_cycle_fn))
             throw std::runtime_error("DLL is missing required host exports");
-        if (smoke_test && edit_cycle_fn)
-            throw std::runtime_error("Packaged DLL contains integration fixture exports");
         const auto deadline = GetTickCount64() + 15000;
         while (!ready_fn() && GetTickCount64() < deadline)
             Sleep(20);
         if (!ready_fn())
             throw std::runtime_error("Overlay hooks did not become ready. Check ern-relics.log");
+        // Do not tear down the process while the DLL is still starting its hooks.
+        if (smoke_test && edit_cycle_fn)
+            throw std::runtime_error("Packaged DLL contains integration fixture exports");
         WNDCLASSW wc{};
         wc.lpfnWndProc = host_proc;
         wc.hInstance = instance;

@@ -43,7 +43,9 @@ Supporting tools are grouped by purpose:
 | `game/` | Back up explicit saves, launch an offline test profile, and run game diagnostics. | `backup_saves.py`, `launch_test.py`, `probe.py`, `verify_refresh.py` |
 
 `process.py` provides argument-list subprocesses and tool lookup in the current
-Python environment. Python commands never activate or modify the caller's shell.
+Python environment. Ordinary commands stream output as they run; commands that
+parse output request capture explicitly. Python commands never activate or modify
+the caller's shell.
 
 Setup uses separate commands, followed by an offline, read-only diagnosis:
 

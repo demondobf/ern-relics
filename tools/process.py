@@ -25,29 +25,19 @@ def hidden_process():
 
 
 def run(arguments, *, cwd=ROOT, **options):
-    # Hidden console children need explicit output handles on Windows. Publish the
-    # captured output unless the caller requested capture or supplied log files.
-    publish = not any(key in options for key in ('capture_output', 'stdout', 'stderr'))
-    if publish:
-        options['capture_output'] = True
-    try:
-        result = subprocess.run(
-            [str(argument) for argument in arguments],
-            cwd=cwd,
-            check=options.pop('check', True),
-            encoding='utf-8',
-            errors='replace',
-            **hidden_process(),
-            **options,
-        )
-    except subprocess.CalledProcessError as error:
-        if publish:
-            print_output(error.stdout, error.stderr)
-            error.stdout = error.stderr = None
-        raise
-    if publish:
-        print_output(result.stdout, result.stderr)
-    return result
+    # Hidden console children need explicit output handles on Windows.
+    if not options.get('capture_output'):
+        options.setdefault('stdout', sys.stdout)
+        options.setdefault('stderr', sys.stderr)
+    return subprocess.run(
+        [str(argument) for argument in arguments],
+        cwd=cwd,
+        check=options.pop('check', True),
+        encoding='utf-8',
+        errors='replace',
+        **hidden_process(),
+        **options,
+    )
 
 
 def print_output(stdout, stderr):
@@ -57,6 +47,10 @@ def print_output(stdout, stderr):
 
 
 def cli(main):
+    # Redirected Windows streams may use a code page that cannot encode a path.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(errors='backslashreplace')
     try:
         main()
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:

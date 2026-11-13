@@ -80,6 +80,7 @@ jobs:
               throw 'Select a versioned release tag in v<major>.<minor>.<patch> format.'
           }
           $version = $Matches[1]
+          if ($version.EndsWith('-dev')) { throw 'The -dev suffix is reserved for development output.' }
           $release = gh api "repos/$env:GH_REPO/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $release.tag_name -cne $env:RELEASE_TAG) { throw 'Release tag not found.' }
           $commit = gh api "repos/$env:GH_REPO/commits/$env:RELEASE_TAG" | ConvertFrom-Json

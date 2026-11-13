@@ -46,6 +46,15 @@ class BuildPipelineTests(unittest.TestCase):
         self.assertEqual(package.name, 'ern-relics-1.0.2-dev')
         self.assertEqual((package / 'ern-relics.dll').read_bytes(), b'production DLL')
 
+    def test_custom_labels_stay_in_the_development_namespace(self):
+        with (
+            patch('tools.build.package.require_native_shell'),
+            patch('tools.build.package.run'),
+            patch('tools.build.package.verify'),
+        ):
+            package = build(label='rc1', build_directory=self.directory, root=self.root)
+        self.assertEqual(package.name, 'ern-relics-1.0.2-rc1-dev')
+
     def test_failures_do_not_publish_and_asan_does_not_package(self):
         with (
             patch('tools.build.package.require_native_shell'),

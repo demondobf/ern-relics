@@ -91,7 +91,7 @@ def write_build_output(root, runtime, name, validate=None):
             shutil.copy2(root / source, stage / destination)
         if validate is not None:
             validate(stage)
-        if re.fullmatch(r'ern-relics-\d+\.\d+\.\d+', name):
+        if not name.endswith('-dev'):
             move_new(dist, stage, output)
         else:
             remove_child(dist, output)

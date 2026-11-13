@@ -133,6 +133,10 @@ rebuild replaces the package. Preserve versioned release packages and ZIPs.
 Both `tools.build.package` and `tools.check` default to the `dev` label. An
 explicit empty label creates an unlabelled package but refuses to replace an
 existing versioned release directory.
+Development output always ends in `-dev`, including custom labels such as
+`--label feature`, which creates `ern-relics-<version>-feature-dev/`. Release
+versions cannot use the reserved `-dev` suffix. Stable and prerelease packages
+are both protected from replacement.
 
 The Python package builder uses the activated Windows shell and a fresh build
 directory, and verifies the production DLL before replacing development output.

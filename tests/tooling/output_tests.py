@@ -12,6 +12,7 @@ from tools.build.output import remove_child, safe_path, write_build_output
 from tools.build.package import build
 from tools.check import check
 from tools.release.manifest import PACKAGE_FILES, PROJECT_FILES
+from tools.release.package import package_release
 
 
 class OutputTests(unittest.TestCase):
@@ -67,12 +68,24 @@ class OutputTests(unittest.TestCase):
                 write_build_output(self.root, self.runtime, 'ern-relics-1.0.0')
         first = write_build_output(self.root, self.runtime, 'ern-relics-1.0.0-dev')
         (self.runtime / 'ern-relics.dll').write_bytes(b'feature DLL')
-        feature = write_build_output(self.root, self.runtime, 'ern-relics-1.0.0-feature')
+        feature = write_build_output(self.root, self.runtime, 'ern-relics-1.0.0-feature-dev')
         self.assertEqual((first / 'ern-relics.dll').read_bytes(), b'first DLL')
         self.assertEqual((feature / 'ern-relics.dll').read_bytes(), b'feature DLL')
         self.assertEqual((frozen / 'ern-relics.dll').read_bytes(), b'first DLL')
         self.assertEqual(archive.read_bytes(), b'frozen archive')
         self.assertEqual(checksum.read_bytes(), b'frozen checksum')
+
+    def test_frozen_prereleases_cannot_be_replaced_by_build_output(self):
+        dev = write_build_output(self.root, self.runtime, 'ern-relics-1.0.0-dev')
+        release = package_release(dev, '1.0.0-rc1', self.root / 'dist')
+        archive = release.archive.read_bytes()
+        (self.runtime / 'ern-relics.dll').write_bytes(b'new DLL')
+        with self.assertRaises(FileExistsError):
+            write_build_output(self.root, self.runtime, release.package.name)
+        self.assertEqual((release.package / 'ern-relics.dll').read_bytes(), b'first DLL')
+        self.assertEqual(release.archive.read_bytes(), archive)
+        with self.assertRaisesRegex(ValueError, 'reserved'):
+            package_release(dev, '1.0.0-feature-dev', self.root / 'dist')
 
     def test_failed_staging_and_traversal(self):
         output = write_build_output(self.root, self.runtime, 'ern-relics-1.0.0-dev')

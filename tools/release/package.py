@@ -24,6 +24,8 @@ class ReleaseArtifacts:
 def package_release(package_directory, version, output_directory=ROOT / 'dist'):
     if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?', version):
         raise ValueError('Invalid release version')
+    if version.endswith('-dev'):
+        raise ValueError('The -dev suffix is reserved for replaceable development output')
     source, dist = safe_path(package_directory), safe_path(output_directory)
     items = list(source.iterdir())
     if {path.name for path in items} != PACKAGE_FILES or any(

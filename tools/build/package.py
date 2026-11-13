@@ -47,7 +47,8 @@ def build(preset='release', label='dev', build_directory=None, jobs=0, root=ROOT
         name = (
             f'ern-relics-{version[1]}'
             + (f'-{preset}' if preset != 'release' else '')
-            + (f'-{label}' if label else '')
+            + (f'-{label}' if label and label != 'dev' else '')
+            + ('-dev' if label else '')
         )
         package = write_build_output(
             root, directory / 'runtime', name, lambda staged: verify(directory, staged, root=root)

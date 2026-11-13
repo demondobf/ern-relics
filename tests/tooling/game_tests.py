@@ -1,5 +1,6 @@
 """Verify explicit game paths, isolated profiles, hidden launch, and save backups."""
 
+import ctypes
 import hashlib
 import io
 import json
@@ -21,7 +22,7 @@ class GameToolTests(unittest.TestCase):
     def setUp(self):
         self.temporary = TemporaryDirectory(prefix='ern-game-tests-')
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.package = self.root / 'Package [named]'
         self.package.mkdir()
         (self.package / 'ern-relics.dll').write_bytes(b'fixture DLL')
@@ -98,6 +99,24 @@ class GameToolTests(unittest.TestCase):
             content['natives'][0]['path'],
             (profile.parent / 'installation/ern-relics.dll').as_posix(),
         )
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows short path aliases')
+    def test_short_path_alias_cannot_put_installation_inside_package(self):
+        short_path = ctypes.WinDLL('kernel32', use_last_error=True).GetShortPathNameW
+        short_path.argtypes = (ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32)
+        short_path.restype = ctypes.c_uint32
+        buffer = ctypes.create_unicode_buffer(32768)
+        count = short_path(str(self.package), buffer, len(buffer))
+        self.assertTrue(0 < count < len(buffer))
+        alias = Path(buffer.value)
+        if alias == self.package:
+            self.skipTest('Short path aliases are disabled for this directory')
+        with (
+            patch('tools.game.launch_test.game_running', return_value=False),
+            self.assertRaisesRegex(ValueError, 'outside replaceable'),
+        ):
+            launch(self.package, self.me3, self.game, True, alias / 'profile')
+        self.assertFalse((self.package / 'profile').exists())
 
     def test_refresh_preserves_configuration_presets_and_journal_outside_the_package(self):
         output = self.root / 'persistent test'

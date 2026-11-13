@@ -38,7 +38,8 @@ def launch(
         raise RuntimeError(
             'Nightreign or EAC is already running. Close it before starting the test profile.'
         )
-    output = safe_path(output_directory)
+    # Check reparse points before resolving Windows 8.3 aliases for containment.
+    output = safe_path(output_directory).resolve()
     if output == package or output.is_relative_to(package):
         raise ValueError('Keep the test profile and logs outside replaceable package output')
     output.mkdir(parents=True, exist_ok=True)

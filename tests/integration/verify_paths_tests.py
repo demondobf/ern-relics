@@ -14,7 +14,7 @@ class VerifyPathsTests(unittest.TestCase):
     def setUp(self):
         self.temporary = TemporaryDirectory(prefix='ern-verify-tests-')
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.build = self.root / 'Build [local]'
         self.package = self.root / 'Package [smoke]'
         self.game = self.root / 'Game directory'

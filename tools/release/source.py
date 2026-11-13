@@ -25,7 +25,18 @@ def clean_checkout(root, commit):
         raise ValueError(f'{root}: source checkout has changes')
 
 
-def build_record(source, tooling, repository, tag, source_commit, tooling_commit, artifacts, run):
+def build_record(
+    source,
+    tooling,
+    repository,
+    tag,
+    source_commit,
+    tooling_commit,
+    artifacts,
+    run,
+    *,
+    package_directory,
+):
     match = re.fullmatch(r'v(\d+\.\d+\.\d+(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?)', tag)
     if not match or not re.fullmatch(r'[\w.-]+/[\w.-]+', repository):
         raise ValueError('Invalid release tag or repository')
@@ -55,7 +66,7 @@ def build_record(source, tooling, repository, tag, source_commit, tooling_commit
             or set(zip_file.namelist()) != PACKAGE_FILES
         ):
             raise ValueError('Unexpected release ZIP contents')
-        package = source / 'dist' / f'ern-relics-{version}-dev'
+        package = Path(package_directory)
         for name in PACKAGE_FILES:
             if zip_file.read(name) != (package / name).read_bytes():
                 raise ValueError(f'{name}: release differs from the checked production package')
@@ -89,7 +100,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     record = commands.add_parser('record')
-    for name in ('source', 'tooling', 'artifacts'):
+    for name in ('source', 'tooling', 'artifacts', 'package-directory'):
         record.add_argument('--' + name, type=Path, required=True)
     for name in ('tag', 'source-commit'):
         record.add_argument('--' + name, required=True)
@@ -109,6 +120,7 @@ def main():
             os.environ['GITHUB_SHA'],
             args.artifacts,
             run,
+            package_directory=args.package_directory,
         )
         path = args.artifacts / f'ern-relics-{args.tag[1:]}.source.json'
         path.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')

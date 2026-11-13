@@ -27,8 +27,9 @@ Python modules combine project-specific operations where needed:
   and static analysis.
 
 Run `uv sync --locked` before these commands. `--no-sync` prevents implicit
-dependency installation. Build commands use a fresh temporary directory unless
-`--build-directory` is supplied. Versioned releases are never replaced.
+dependency installation. Native and Python build commands reuse `.build/<preset>/`
+unless `--build-directory` is supplied. Release verification uses a private fresh
+build and candidate by default. Versioned releases are never replaced.
 
 Supporting tools are grouped by purpose:
 

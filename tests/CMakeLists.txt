@@ -80,13 +80,14 @@ add_test(NAME native_presets COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.pr
     --cmake "${CMAKE_COMMAND}" --ninja "${CMAKE_MAKE_PROGRAM}")
 add_test(NAME build_output COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.output_tests)
 add_test(NAME build_pipeline COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.build_pipeline_tests)
+add_test(NAME release_build COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.release_build_tests)
 add_test(NAME tooling_process COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.process_tests)
 add_test(NAME packaging COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.package_tests)
 add_test(NAME launch_paths COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.game_tests)
 add_test(NAME third_party_notices COMMAND "${Python3_EXECUTABLE}" -m tools.checks.notices)
 add_test(NAME notice_rejection COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.notices_tests)
 set_tests_properties(third_party_notices notice_rejection PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-set_tests_properties(source_assets source_asset_rejection source_setup llvm_setup doctor native_shell native_presets build_output build_pipeline tooling_process packaging launch_paths third_party_notices notice_rejection PROPERTIES
+set_tests_properties(source_assets source_asset_rejection source_setup llvm_setup doctor native_shell native_presets build_output build_pipeline release_build tooling_process packaging launch_paths third_party_notices notice_rejection PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "tooling" TIMEOUT 180)
 add_test(NAME refresh_verification COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.refresh_tests)
 set_tests_properties(refresh_verification PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "tooling;game" TIMEOUT 30)

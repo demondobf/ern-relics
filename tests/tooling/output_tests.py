@@ -87,6 +87,16 @@ class OutputTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'reserved'):
             package_release(dev, '1.0.0-feature-dev', self.root / 'dist')
 
+    def test_explicit_candidates_are_never_replaced(self):
+        destination = self.root / 'candidate/package'
+        write_build_output(self.root, self.runtime, 'ern-relics-1.0.0-dev', destination=destination)
+        (self.runtime / 'ern-relics.dll').write_bytes(b'new DLL')
+        with self.assertRaises(FileExistsError):
+            write_build_output(
+                self.root, self.runtime, 'ern-relics-1.0.0-dev', destination=destination
+            )
+        self.assertEqual((destination / 'ern-relics.dll').read_bytes(), b'first DLL')
+
     def test_failed_staging_and_traversal(self):
         output = write_build_output(self.root, self.runtime, 'ern-relics-1.0.0-dev')
         (self.root / 'LICENSE').unlink()

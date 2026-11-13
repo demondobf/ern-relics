@@ -55,6 +55,28 @@ class BuildPipelineTests(unittest.TestCase):
             package = build(label='rc1', build_directory=self.directory, root=self.root)
         self.assertEqual(package.name, 'ern-relics-1.0.2-rc1-dev')
 
+    def test_default_build_directory_matches_the_native_preset(self):
+        with (
+            patch('tools.build.package.require_native_shell'),
+            patch('tools.build.package.run') as command,
+            patch('tools.build.package.verify'),
+        ):
+            build(preset='asan', root=self.root)
+        self.assertEqual(command.call_args_list[0].args[0][4], self.root / '.build/asan')
+
+    def test_analysis_failure_preserves_the_existing_package(self):
+        package = self.root / 'dist/ern-relics-1.0.2-dev'
+        package.mkdir(parents=True)
+        (package / 'ern-relics.dll').write_bytes(b'previous DLL')
+        with (
+            patch('tools.build.package.require_native_shell'),
+            patch('tools.build.package.run'),
+            patch('tools.build.package.analyze', side_effect=RuntimeError('Analysis failed')),
+            self.assertRaisesRegex(RuntimeError, 'Analysis failed'),
+        ):
+            build(build_directory=self.directory, root=self.root, analysis=True)
+        self.assertEqual((package / 'ern-relics.dll').read_bytes(), b'previous DLL')
+
     def test_failures_do_not_publish_and_asan_does_not_package(self):
         with (
             patch('tools.build.package.require_native_shell'),

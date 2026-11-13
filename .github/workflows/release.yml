@@ -115,7 +115,7 @@ jobs:
           $version = [IO.File]::ReadAllText('version.txt').Trim()
           if ($version -cne $env:RELEASE_VERSION) { throw 'Tag and source version do not match.' }
           ./tools/setup/shell.ps1
-          uv run --no-sync python -m tools.check --label dev --jobs 4 --build-directory "$env:RUNNER_TEMP/release-build"
+          uv run --no-sync python -m tools.check --jobs 4 --build-directory "$env:RUNNER_TEMP/release-build" --package-directory "$env:RUNNER_TEMP/release-candidate"
       - name: Check AddressSanitizer
         working-directory: source
         run: |
@@ -124,11 +124,11 @@ jobs:
       - name: Package checked production DLL
         id: package
         run: |
-          uv --directory tooling run --project ../source --no-sync python -m tools.release.package --package-directory "../source/dist/ern-relics-$env:RELEASE_VERSION-dev" --version $env:RELEASE_VERSION --output-directory ../artifacts
+          uv --directory tooling run --project ../source --no-sync python -m tools.release.package --package-directory "$env:RUNNER_TEMP/release-candidate" --version $env:RELEASE_VERSION --output-directory ../artifacts
           if ($LASTEXITCODE -ne 0) { throw 'Release packaging failed.' }
       - name: Record tagged source and build tooling
         run: |
-          uv --directory tooling run --project ../source --no-sync python -m tools.release.source record --source ../source --tooling . --tag $env:RELEASE_TAG --source-commit $env:RELEASE_SHA --artifacts ../artifacts
+          uv --directory tooling run --project ../source --no-sync python -m tools.release.source record --source ../source --tooling . --tag $env:RELEASE_TAG --source-commit $env:RELEASE_SHA --artifacts ../artifacts --package-directory "$env:RUNNER_TEMP/release-candidate"
           if ($LASTEXITCODE -ne 0) { throw 'Source provenance validation failed.' }
       - name: Attest GitHub build provenance
         id: build_attestation

@@ -79,19 +79,19 @@ def move_new(root, source, destination):
     source.rename(destination)
 
 
-def write_build_output(root, runtime, name, validate=None):
+def write_build_output(root, runtime, name, validate=None, *, destination=None):
     if not re.fullmatch(r'ern-relics-\d+\.\d+\.\d+(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?', name):
         raise ValueError('Invalid package name')
     root = safe_path(root)
-    dist = safe_path(root / 'dist')
-    output = safe_path(dist / name)
+    output = safe_path(destination if destination is not None else root / 'dist' / name)
+    dist = output.parent
     with temporary_directory(dist, '.stage-') as stage:
         shutil.copy2(Path(runtime) / 'ern-relics.dll', stage / 'ern-relics.dll')
-        for destination, source in PROJECT_FILES.items():
-            shutil.copy2(root / source, stage / destination)
+        for filename, source in PROJECT_FILES.items():
+            shutil.copy2(root / source, stage / filename)
         if validate is not None:
             validate(stage)
-        if not name.endswith('-dev'):
+        if destination is not None or not name.endswith('-dev'):
             move_new(dist, stage, output)
         else:
             remove_child(dist, output)

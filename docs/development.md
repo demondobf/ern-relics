@@ -138,12 +138,14 @@ Development output always ends in `-dev`, including custom labels such as
 versions cannot use the reserved `-dev` suffix. Stable and prerelease packages
 are both protected from replacement.
 
-The Python package builder uses the activated Windows shell and a fresh build
-directory, and verifies the production DLL before replacing development output.
-It does not change the caller directory or environment. For AddressSanitizer, run
+The Python package builder uses the activated Windows shell and the same
+`.build/<preset>/` directory as native commands. It verifies the production DLL
+before replacing development output. Full checks also finish static analysis
+before publishing. It does not change the caller directory or environment.
+Use `--package-directory <new-directory>` to write a separate checked candidate;
+an existing candidate is never replaced. For AddressSanitizer, run
 `cmake --workflow --preset asan` from the activated shell, or
-`uv run --no-sync python -m tools.build.package --preset asan` for a fresh
-temporary build.
+`uv run --no-sync python -m tools.build.package --preset asan`.
 
 The [CI workflow](../.github/workflows/ci.yml) runs for pull requests, pushes to
 `main`, and manual runs. Pushes to other branches rely on PR checks to avoid
@@ -168,7 +170,7 @@ The [shared native setup](../.github/actions/setup-native/action.yml) caches uv
 packages, native dependency checkouts keyed by `sources.lock.json`, and the pinned
 LLVM analyzer and builtin headers. Native-source setup validates cached dependency
 origins, commits, and clean working trees. Ordinary builds skip LLVM setup.
-Packaged checks and CI use fresh build directories; native presets reuse `.build/`.
+Local checks and native presets reuse `.build/`; CI supplies fresh runner paths.
 CI also caches compiler results with
 pinned [sccache](https://github.com/mozilla/sccache), using a 512 MiB disk cache
 per job type. Each commit saves its own cache and can restore the latest cache
@@ -290,7 +292,10 @@ packaging regression test keeps its input in TEMP and its output in the checkout
 to exercise that layout on hosted Windows runners.
 
 The command runs the full check and creates the release package, ZIP, and checksum
-in `dist/`. Existing release output is never replaced. Use
+in `dist/`. It owns a private fresh build and checked candidate, so concurrent
+development rebuilds cannot change the bytes being frozen. An explicit
+`--build-directory` overrides the fresh build directory. Existing release output
+is never replaced. Use
 `--output-directory <directory>` for a separate candidate.
 
 Complete in-game acceptance before publishing. Upload the ZIP to Nexus Mods.
@@ -303,7 +308,7 @@ commit's tooling. Source compilation, tests, clang-tidy, and AddressSanitizer ru
 from the unmodified tagged checkout. The workflow's packager can be updated
 without changing the tagged code. Before attesting, the source validator
 checks both checkout commits and cleanliness, dependency pins and origins, ZIP
-contents, the checksum, and equality with the checked production package.
+contents, the checksum, and equality with the explicit checked candidate.
 
 Release rebuilds require the Python tooling and `tools/setup/shell.ps1` in the
 tag. Tags using the old setup, including `v1.0.1` and `v1.0.2`, are rejected before

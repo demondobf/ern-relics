@@ -1,6 +1,8 @@
 # Build output and downloaded dependencies
 /dist/
+/.build/
 /third_party/
+/.tools/
 
 # Local data and output
 /output/

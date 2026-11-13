@@ -5,22 +5,17 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 from pathlib import Path
 from zipfile import ZipFile
 
+from tools.process import cli, run
+from tools.release.manifest import PACKAGE_FILES
+
 PREDICATE_TYPE = 'https://github.com/demondobf/ern-relics/attestations/release-source/v1'
-PACKAGE_FILES = {
-    'ern-relics.dll',
-    'ern-relics.ini',
-    'nightreign-relics.me3',
-    'LICENSE',
-    'ThirdPartyNotices.txt',
-}
 
 
 def git(root, *args):
-    return subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
+    return run(['git', '-C', root, *args], capture_output=True).stdout.strip()
 
 
 def clean_checkout(root, commit):
@@ -127,4 +122,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    cli(main)

@@ -26,24 +26,22 @@ runs:
       if: inputs.analysis == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ runner.temp }}/ern-relics-llvm
-        key: llvm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/pyproject.toml', inputs.working-directory), format('{0}/tools/ci/setup-llvm.ps1', inputs.working-directory)) }}
+        path: ${{ inputs.working-directory }}/.tools/llvm
+        key: llvm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/pyproject.toml', inputs.working-directory), format('{0}/tools/setup/llvm.py', inputs.working-directory), format('{0}/tools/setup/native.py', inputs.working-directory)) }}
     - name: Set up pinned LLVM
       if: inputs.analysis == 'true'
       shell: pwsh
       working-directory: ${{ inputs.working-directory }}
-      run: ./tools/ci/setup-llvm.ps1
+      run: uv run --no-sync python -m tools.setup.llvm
     - name: Cache pinned native sources
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.working-directory }}/third_party
-        key: sources-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/sources.lock.json', inputs.working-directory), format('{0}/tools/bootstrap.ps1', inputs.working-directory)) }}
-    - name: Bootstrap dependencies
+        key: sources-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/sources.lock.json', inputs.working-directory), format('{0}/tools/setup/sources.py', inputs.working-directory)) }}
+    - name: Set up pinned native sources
       shell: pwsh
       working-directory: ${{ inputs.working-directory }}
-      env:
-        ERN_CI_ANALYSIS: ${{ inputs.analysis }}
-      run: ./tools/bootstrap.ps1 -SkipAnalysis:($env:ERN_CI_ANALYSIS -ne 'true')
+      run: uv run --no-sync python -m tools.setup.sources
     - name: Set up compiler cache
       uses: Mozilla-Actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
       with:

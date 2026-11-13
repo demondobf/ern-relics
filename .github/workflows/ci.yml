@@ -43,7 +43,7 @@ jobs:
       - name: Check Python lint
         run: uv run --locked ruff check --no-cache .
       - name: Check Python and C++ formatting
-        run: ./tools/format.ps1
+        run: uv run --locked python -m tools.format
       - name: Check repository layout and links
         run: uv run --locked python -m tools.checks.layout
       - name: Test CI change selection
@@ -76,10 +76,14 @@ jobs:
           analysis: ${{ inputs.full && 'true' || 'false' }}
       - name: Build and test Release
         if: ${{ !inputs.full }}
-        run: ./tools/build.ps1 -Label dev -Jobs 4 -BuildDirectory "$env:RUNNER_TEMP/build"
+        run: |
+          ./tools/setup/shell.ps1
+          uv run --no-sync python -m tools.build.package --label dev --jobs 4 --build-directory "$env:RUNNER_TEMP/build"
       - name: Check Release with static analysis
         if: inputs.full
-        run: ./tools/check.ps1 -Label dev -Jobs 4 -BuildDirectory "$env:RUNNER_TEMP/build"
+        run: |
+          ./tools/setup/shell.ps1
+          uv run --no-sync python -m tools.check --label dev --jobs 4 --build-directory "$env:RUNNER_TEMP/build"
 
   asan:
     name: AddressSanitizer checks
@@ -101,4 +105,6 @@ jobs:
       - name: Set up native checks
         uses: ./.github/actions/setup-native
       - name: Check AddressSanitizer
-        run: ./tools/build.ps1 -Preset asan -Jobs 4 -BuildDirectory "$env:RUNNER_TEMP/build"
+        run: |
+          ./tools/setup/shell.ps1
+          uv run --no-sync python -m tools.build.package --preset asan --jobs 4 --build-directory "$env:RUNNER_TEMP/build"

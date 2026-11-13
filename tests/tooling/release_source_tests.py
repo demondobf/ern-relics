@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
-from tools.ci.release_source import PACKAGE_FILES, PREDICATE_TYPE, build_record, verify_record
+from tools.release.source import PACKAGE_FILES, PREDICATE_TYPE, build_record, verify_record
 
 
 class ReleaseSourceTests(unittest.TestCase):

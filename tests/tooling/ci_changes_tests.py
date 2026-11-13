@@ -15,7 +15,7 @@ class ChangeSelectionTests(unittest.TestCase):
             'src/app/runtime.cpp',
             'src/app/runtime.md',
             'config/ern-relics.ini',
-            'tools/check.ps1',
+            'tools/check.py',
             'tests/tooling/ci_changes_tests.py',
             '.github/workflows/ci.yml',
             '.github/actions/setup-native/action.yml',

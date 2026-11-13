@@ -158,7 +158,11 @@ def check_python_imports(root):
 
 
 def check_markdown_links(root):
-    for path in [*root.glob('*.md'), *(root / 'docs').rglob('*.md')]:
+    for path in [
+        *root.glob('*.md'),
+        *(root / 'docs').rglob('*.md'),
+        *(root / 'tools').rglob('*.md'),
+    ]:
         for target in re.findall(r'\[[^\]]*\]\(([^)]+)\)', path.read_text(encoding='utf-8')):
             target = target.strip('<>').split('#', 1)[0]
             if target and not re.match(r'^[a-z]+:', target) and not (path.parent / target).exists():
@@ -184,7 +188,7 @@ def check_dependency_pins(root):
 
 
 def check_python_dependencies(root):
-    """Match direct packages to Python imports and the scripts' uv tool commands."""
+    """Match direct packages to Python imports and pinned executable lookups."""
     project = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
 
     def package_name(name):
@@ -209,17 +213,18 @@ def check_python_dependencies(root):
                     modules = [alias.name for alias in node.names]
                 elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                     modules = [node.module]
+                elif (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == 'python_tool'
+                    and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                ):
+                    used.add(package_name(node.args[0].value))
                 for module in modules:
                     name = module.split('.', 1)[0]
                     if name not in sys.stdlib_module_names and name not in {'tools', 'tests'}:
                         used.add(package_name({'PIL': 'pillow'}.get(name, name)))
-        for path in (root / directory).rglob('*.ps1'):
-            # The wrappers invoke packaged executables directly after --locked.
-            commands = re.findall(
-                r'(?m)^\s*& uv run [^\r\n]*?--locked\s+([a-z][\w-]*)',
-                path.read_text(encoding='utf-8'),
-            )
-            used.update(package_name(command) for command in commands if command != 'python')
     if declared != used:
         raise ValueError(
             f'Python dependency declarations differ: unused {sorted(declared - used)}, undeclared {sorted(used - declared)}'

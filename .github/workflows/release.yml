@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to rebuild; leave empty for Release Please.
+        description: Existing tag with separate setup commands to rebuild; leave empty for Release Please.
         type: string
         default: ""
       replace_assets:
@@ -77,7 +77,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           if ($env:RELEASE_TAG -cnotmatch '^v(\d+\.\d+\.\d+(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?)$') {
-              throw 'Select a versioned release tag such as v1.0.1.'
+              throw 'Select a versioned release tag in v<major>.<minor>.<patch> format.'
           }
           $version = $Matches[1]
           $release = gh api "repos/$env:GH_REPO/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
@@ -96,29 +96,38 @@ jobs:
           ref: ${{ steps.source.outputs.sha }}
           path: source
           persist-credentials: false
+      - name: Validate tagged setup commands
+        run: |
+          foreach ($script in @('setup/llvm.py', 'setup/sources.py', 'setup/shell.ps1', 'check.py')) {
+              if (-not (Test-Path -LiteralPath "source/tools/$script" -PathType Leaf)) {
+                  throw "Release tag $env:RELEASE_TAG uses an unsupported setup. Select a tag containing the Python tooling and native shell activation."
+              }
+          }
       - name: Set up native checks for tagged source
         uses: ./tooling/.github/actions/setup-native
         with:
           analysis: "true"
           working-directory: source
       - name: Check tagged source
+        working-directory: source
         run: |
-          $version = [IO.File]::ReadAllText('source/version.txt').Trim()
+          $version = [IO.File]::ReadAllText('version.txt').Trim()
           if ($version -cne $env:RELEASE_VERSION) { throw 'Tag and source version do not match.' }
-          ./source/tools/check.ps1 -Label dev -Jobs 4 -BuildDirectory "$env:RUNNER_TEMP/release-build"
+          ./tools/setup/shell.ps1
+          uv run --no-sync python -m tools.check --label dev --jobs 4 --build-directory "$env:RUNNER_TEMP/release-build"
       - name: Check AddressSanitizer
-        # Historical tags use shared /Zi PDBs, which cannot be safely wrapped by sccache.
-        env:
-          CMAKE_C_COMPILER_LAUNCHER: ""
-          CMAKE_CXX_COMPILER_LAUNCHER: ""
-        run: ./source/tools/build.ps1 -Preset asan -Jobs 4 -BuildDirectory "$env:RUNNER_TEMP/asan-build"
+        working-directory: source
+        run: |
+          ./tools/setup/shell.ps1
+          uv run --no-sync python -m tools.build.package --preset asan --jobs 4 --build-directory "$env:RUNNER_TEMP/asan-build"
       - name: Package checked production DLL
         id: package
         run: |
-          ./tooling/tools/package.ps1 -PackageDirectory "source/dist/ern-relics-$env:RELEASE_VERSION-dev" -Version $env:RELEASE_VERSION -OutputDirectory artifacts
+          uv --directory tooling run --project ../source --no-sync python -m tools.release.package --package-directory "../source/dist/ern-relics-$env:RELEASE_VERSION-dev" --version $env:RELEASE_VERSION --output-directory ../artifacts
+          if ($LASTEXITCODE -ne 0) { throw 'Release packaging failed.' }
       - name: Record tagged source and build tooling
         run: |
-          uv run --project source --locked python tooling/tools/ci/release_source.py record --source source --tooling tooling --tag $env:RELEASE_TAG --source-commit $env:RELEASE_SHA --artifacts artifacts
+          uv --directory tooling run --project ../source --no-sync python -m tools.release.source record --source ../source --tooling . --tag $env:RELEASE_TAG --source-commit $env:RELEASE_SHA --artifacts ../artifacts
           if ($LASTEXITCODE -ne 0) { throw 'Source provenance validation failed.' }
       - name: Attest GitHub build provenance
         id: build_attestation
@@ -151,7 +160,7 @@ jobs:
           }
           gh attestation verify $archive --repo $env:GH_REPO --signer-workflow $signer --signer-digest $env:GITHUB_SHA --deny-self-hosted-runners --predicate-type https://github.com/demondobf/ern-relics/attestations/release-source/v1 --format json > "$env:RUNNER_TEMP/source-attestation.json"
           if ($LASTEXITCODE -ne 0) { throw 'Tagged source attestation verification failed.' }
-          uv run --project source --locked python tooling/tools/ci/release_source.py verify --record "artifacts/ern-relics-$env:RELEASE_VERSION.source.json" --verification "$env:RUNNER_TEMP/source-attestation.json"
+          uv --directory tooling run --project ../source --no-sync python -m tools.release.source verify --record "../artifacts/ern-relics-$env:RELEASE_VERSION.source.json" --verification "$env:RUNNER_TEMP/source-attestation.json"
           if ($LASTEXITCODE -ne 0) { throw 'Attested source differs from the checked release source.' }
       - name: Preserve downloadable attestation bundles
         env:

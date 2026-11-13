@@ -66,20 +66,28 @@ add_test(NAME layout_rejection COMMAND "${Python3_EXECUTABLE}" -m tests.integrat
 set_tests_properties(layout_rejection PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "build" TIMEOUT 30)
 add_test(NAME ci_changes COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.ci_changes_tests)
 set_tests_properties(ci_changes PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "build" TIMEOUT 30)
-add_test(NAME verify_paths COMMAND pwsh -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/integration/verify_paths_tests.ps1")
-set_tests_properties(verify_paths PROPERTIES LABELS "build" TIMEOUT 30)
+add_test(NAME verify_paths COMMAND "${Python3_EXECUTABLE}" -m tests.integration.verify_paths_tests)
+set_tests_properties(verify_paths PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "build" TIMEOUT 30)
 
 # Tooling checks.
-add_test(NAME source_assets COMMAND pwsh -NoProfile -File "${CMAKE_SOURCE_DIR}/tools/checks/source-assets.ps1" -Root "${CMAKE_SOURCE_DIR}")
-add_test(NAME source_asset_rejection COMMAND pwsh -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/tooling/source_assets_tests.ps1")
-add_test(NAME bootstrap COMMAND pwsh -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/tooling/bootstrap_tests.ps1")
-add_test(NAME build_output COMMAND pwsh -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/tooling/build_output_tests.ps1")
-add_test(NAME packaging COMMAND pwsh -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/tooling/package_tests.ps1")
-add_test(NAME launch_paths COMMAND pwsh -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/tooling/launch_paths_tests.ps1")
+add_test(NAME source_assets COMMAND "${Python3_EXECUTABLE}" -m tools.checks.source_assets)
+add_test(NAME source_asset_rejection COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.source_assets_tests)
+add_test(NAME source_setup COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.source_setup_tests)
+add_test(NAME llvm_setup COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.llvm_setup_tests)
+add_test(NAME doctor COMMAND pwsh -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/tooling/doctor_tests.ps1" -Python "${Python3_EXECUTABLE}")
+add_test(NAME native_shell COMMAND pwsh -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/tooling/native_shell_tests.ps1")
+add_test(NAME native_presets COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.presets_tests
+    --cmake "${CMAKE_COMMAND}" --ninja "${CMAKE_MAKE_PROGRAM}")
+add_test(NAME build_output COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.output_tests)
+add_test(NAME build_pipeline COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.build_pipeline_tests)
+add_test(NAME tooling_process COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.process_tests)
+add_test(NAME packaging COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.package_tests)
+add_test(NAME launch_paths COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.game_tests)
 add_test(NAME third_party_notices COMMAND "${Python3_EXECUTABLE}" -m tools.checks.notices)
 add_test(NAME notice_rejection COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.notices_tests)
 set_tests_properties(third_party_notices notice_rejection PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-set_tests_properties(source_assets source_asset_rejection bootstrap build_output packaging launch_paths third_party_notices notice_rejection PROPERTIES LABELS "tooling" TIMEOUT 180)
+set_tests_properties(source_assets source_asset_rejection source_setup llvm_setup doctor native_shell native_presets build_output build_pipeline tooling_process packaging launch_paths third_party_notices notice_rejection PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "tooling" TIMEOUT 180)
 add_test(NAME refresh_verification COMMAND "${Python3_EXECUTABLE}" -m tests.tooling.refresh_tests)
 set_tests_properties(refresh_verification PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "tooling;game" TIMEOUT 30)
 
@@ -113,12 +121,12 @@ target_compile_definitions(ern_relics_host PRIVATE UNICODE _UNICODE NOMINMAX WIN
 ern_configure_target(ern_relics_host)
 target_link_libraries(ern_relics_host PRIVATE d3d12 dxgi)
 
-add_test(NAME dx12_host COMMAND pwsh -NoProfile -File "${CMAKE_SOURCE_DIR}/tools/verify.ps1"
-    -BuildDirectory "$<TARGET_FILE_DIR:ern_relics_host>")
-set_tests_properties(dx12_host PROPERTIES LABELS "integration;dx12" TIMEOUT 60)
-add_test(NAME dx12_host_close COMMAND pwsh -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/integration/host_close_tests.ps1"
-    -BuildDirectory "$<TARGET_FILE_DIR:ern_relics_host>")
-set_tests_properties(dx12_host_close PROPERTIES LABELS "integration;dx12" TIMEOUT 60)
+add_test(NAME dx12_host COMMAND "${Python3_EXECUTABLE}" -m tools.build.verify
+    --build-directory "$<TARGET_FILE_DIR:ern_relics_host>")
+set_tests_properties(dx12_host PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "integration;dx12" TIMEOUT 60)
+add_test(NAME dx12_host_close COMMAND "${Python3_EXECUTABLE}" -m tests.integration.host_close_tests
+    --build-directory "$<TARGET_FILE_DIR:ern_relics_host>")
+set_tests_properties(dx12_host_close PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" LABELS "integration;dx12" TIMEOUT 60)
 
 # Optional AddressSanitizer check.
 if(ERN_ENABLE_ASAN)

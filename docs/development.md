@@ -225,9 +225,12 @@ uv run --no-sync python -m tools.game.launch_test --package-directory '<package-
 ```
 
 Pass `--me3-exe` and `--game-exe` if they are installed outside the default locations.
-The helper keeps its profile and launcher logs under `output/game-test/`, outside
-the replaceable package. Use `--output-directory` to choose another location, or
-`--check` to validate paths and write the profile without launching the game.
+The helper copies the DLL into `output/game-test/installation/` and loads that
+persistent installation. It creates the configuration on first use and preserves
+later configuration edits, presets, and journals when refreshing the DLL. Profiles
+and launcher logs also stay under `output/game-test/`, outside replaceable packages.
+Use `--output-directory` to choose another persistent location, or `--check` to
+prepare the installation and profile without launching the game.
 For editing changes, exercise Apply and Undo, then save and reload to check
 persistence. Other diagnostics are in [tools/](../tools/).
 

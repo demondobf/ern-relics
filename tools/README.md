@@ -65,5 +65,6 @@ the Python environment works.
 Tests live under `tests/tooling/` and `tests/integration/` and use Python's standard
 library. Doctor and shell activation retain PowerShell tests. Keep
 downloaded tools, checkouts, game data, saves, and journals out of packages. The
-game test helper writes profiles and logs under `output/game-test/`, outside
-replaceable package output.
+game test helper maintains a persistent installation, configuration, presets,
+journals, profiles, and logs under `output/game-test/`, outside replaceable package
+output. Refreshing its DLL preserves the installed configuration and runtime state.

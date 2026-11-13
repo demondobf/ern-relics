@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import subprocess
 import tomllib
 import unittest
 from contextlib import redirect_stdout
@@ -11,6 +12,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from tools.build.output import remove_child
 from tools.game.backup_saves import backup
 from tools.game.launch_test import launch
 
@@ -23,6 +25,7 @@ class GameToolTests(unittest.TestCase):
         self.package = self.root / 'Package [named]'
         self.package.mkdir()
         (self.package / 'ern-relics.dll').write_bytes(b'fixture DLL')
+        (self.package / 'ern-relics.ini').write_text('initial configuration')
         (self.package / 'keep.txt').write_text('keep')
         self.me3, self.game = self.root / 'ME3 [local].exe', self.root / 'Game local.exe'
         for path in (self.me3, self.game):
@@ -48,17 +51,20 @@ class GameToolTests(unittest.TestCase):
                 content = profile.read_text()
                 self.assertIn('start_online = false', content)
                 self.assertIn('ern-relics-test.sl2', content)
-                self.assertIn(json.dumps((self.package / 'ern-relics.dll').as_posix()), content)
+                self.assertIn(
+                    json.dumps((output / 'installation/ern-relics.dll').as_posix()), content
+                )
                 launch(self.package, self.me3, self.game, False, output)
                 self.assertEqual(
                     process.call_args.args[0],
                     [str(self.me3), 'launch', '--profile', str(profile), '--exe', str(self.game)],
                 )
-                self.assertEqual(process.call_args.kwargs['cwd'], self.package)
+                self.assertEqual(process.call_args.kwargs['cwd'], output / 'installation')
                 if os.name == 'nt':
                     self.assertIn('startupinfo', process.call_args.kwargs)
             self.assertEqual(
-                {path.name for path in self.package.iterdir()}, {'ern-relics.dll', 'keep.txt'}
+                {path.name for path in self.package.iterdir()},
+                {'ern-relics.dll', 'ern-relics.ini', 'keep.txt'},
             )
             self.assertEqual(Path.cwd(), self.root)
         finally:
@@ -81,13 +87,76 @@ class GameToolTests(unittest.TestCase):
         package = self.root / 'Package \U0001f9ea'
         package.mkdir()
         (package / 'ern-relics.dll').write_bytes(b'fixture DLL')
+        (package / 'ern-relics.ini').write_text('initial configuration')
         with (
             patch('tools.game.launch_test.game_running', return_value=False),
             redirect_stdout(io.StringIO()),
         ):
             profile = launch(package, self.me3, self.game, True, self.root / 'Profile \U0001f9ea')
         content = tomllib.loads(profile.read_text(encoding='utf-8'))
-        self.assertEqual(content['natives'][0]['path'], (package / 'ern-relics.dll').as_posix())
+        self.assertEqual(
+            content['natives'][0]['path'],
+            (profile.parent / 'installation/ern-relics.dll').as_posix(),
+        )
+
+    def test_refresh_preserves_configuration_presets_and_journal_outside_the_package(self):
+        output = self.root / 'persistent test'
+        with patch('tools.game.launch_test.game_running', return_value=False):
+            launch(self.package, self.me3, self.game, True, output)
+            installation = output / 'installation'
+            ini = installation / 'ern-relics.ini'
+            ini.write_text('my configuration')
+            (installation / 'presets').mkdir()
+            preset = installation / 'presets/my-preset.json'
+            preset.write_text('my preset')
+            journal = installation / 'edits.jsonl'
+            journal.write_text('my journal')
+            (self.package / 'ern-relics.dll').write_bytes(b'updated DLL')
+            (self.package / 'ern-relics.ini').write_text('updated defaults')
+            launch(self.package, self.me3, self.game, True, output)
+        remove_child(self.root, self.package)
+        self.assertEqual((installation / 'ern-relics.dll').read_bytes(), b'updated DLL')
+        self.assertEqual(ini.read_text(), 'my configuration')
+        self.assertEqual(preset.read_text(), 'my preset')
+        self.assertEqual(journal.read_text(), 'my journal')
+        self.assertFalse(list(installation.glob('.stage-*')))
+
+    def test_installed_configuration_reparse_point_is_rejected_before_refresh(self):
+        output = self.root / 'persistent test'
+        installation = output / 'installation'
+        installation.mkdir(parents=True)
+        dll = installation / 'ern-relics.dll'
+        dll.write_bytes(b'previous DLL')
+        target = self.root / 'outside'
+        target.mkdir()
+        ini = installation / 'ern-relics.ini'
+        if os.name == 'nt':
+            subprocess.run(
+                [
+                    'pwsh',
+                    '-NoProfile',
+                    '-Command',
+                    'New-Item -ItemType Junction -Path $env:ERN_TEST_LINK -Target $env:ERN_TEST_TARGET | Out-Null',
+                ],
+                env=dict(os.environ, ERN_TEST_LINK=str(ini), ERN_TEST_TARGET=str(target)),
+                capture_output=True,
+                check=True,
+            )
+        else:
+            ini.symlink_to(target, target_is_directory=True)
+        try:
+            with (
+                patch('tools.game.launch_test.game_running', return_value=False),
+                self.assertRaisesRegex(ValueError, 'reparse'),
+            ):
+                launch(self.package, self.me3, self.game, True, output)
+            self.assertEqual(dll.read_bytes(), b'previous DLL')
+            self.assertEqual(list(target.iterdir()), [])
+        finally:
+            if os.name == 'nt':
+                ini.rmdir()
+            else:
+                ini.unlink()
 
     def test_backup_checksums_and_source_bytes(self):
         saves = self.root / 'saves'

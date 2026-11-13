@@ -5,11 +5,13 @@ import csv
 import io
 import json
 import os
+import shutil
+import stat
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tools.build.output import safe_path
+from tools.build.output import safe_path, temporary_directory
 from tools.process import ROOT, cli, hidden_process, run
 
 
@@ -29,7 +31,7 @@ def launch(
 ):
     package = Path(package_directory).resolve(strict=True)
     me3, game = Path(me3_exe).resolve(strict=True), Path(game_exe).resolve(strict=True)
-    for path in (me3, game, package / 'ern-relics.dll'):
+    for path in (me3, game, package / 'ern-relics.dll', package / 'ern-relics.ini'):
         if not path.is_file():
             raise ValueError(f'Required file not found: {path}')
     if game_running():
@@ -40,14 +42,25 @@ def launch(
     if output == package or output.is_relative_to(package):
         raise ValueError('Keep the test profile and logs outside replaceable package output')
     output.mkdir(parents=True, exist_ok=True)
+    installation = safe_path(output / 'installation')
+    installation.mkdir(exist_ok=True)
+    native_dll = safe_path(installation / 'ern-relics.dll')
+    ini = safe_path(installation / 'ern-relics.ini')
+    with temporary_directory(installation, '.stage-') as stage:
+        shutil.copy2(package / 'ern-relics.dll', stage / 'ern-relics.dll')
+        if native_dll.exists():
+            native_dll.chmod(native_dll.stat().st_mode | stat.S_IWRITE)
+        (stage / 'ern-relics.dll').replace(native_dll)
+    if not ini.exists():
+        shutil.copy2(package / 'ern-relics.ini', ini)
     profile = output / 'nightreign-relics-test.me3'
-    native = json.dumps((package / 'ern-relics.dll').as_posix(), ensure_ascii=False)
+    native = json.dumps(native_dll.as_posix(), ensure_ascii=False)
     profile.write_text(
         f'profileVersion = "v1"\nsavefile = "ern-relics-test.sl2"\nstart_online = false\n\n[[supports]]\ngame = "nightreign"\n\n[[natives]]\npath = {native}\nload_early = true\n',
         encoding='utf-8',
     )
     if check:
-        print(f'Test profile paths verified: {profile}. No game was launched.')
+        print(f'Test installation and profile prepared: {profile}. No game was launched.')
         return profile
     stamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S-%f')
     with (
@@ -56,7 +69,7 @@ def launch(
     ):
         process = subprocess.Popen(
             [str(me3), 'launch', '--profile', str(profile), '--exe', str(game)],
-            cwd=package,
+            cwd=installation,
             stdout=stdout,
             stderr=stderr,
             **hidden_process(),

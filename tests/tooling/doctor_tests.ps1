@@ -14,7 +14,7 @@ $savedUvEnvironment = $env:UV_PROJECT_ENVIRONMENT
 $env:UV_PROJECT_ENVIRONMENT = $null
 $mockVswhere = $null
 
-function New-DoctorFixture([string]$Name, [switch]$MissingUv, [switch]$IncompleteLLVM, [string]$UvVersion = '0.13.7') {
+function New-DoctorFixture([string]$Name, [switch]$MissingUv, [string]$UvVersion = '0.13.7') {
     $root = Join-Path $temporaryRoot $Name
     New-Item -ItemType Directory -Path (Join-Path $root 'tools/setup') -Force | Out-Null
     foreach ($file in @('tools/setup/doctor.ps1', 'tools/setup/environment.ps1', 'pyproject.toml', 'uv.lock', '.python-version')) {
@@ -27,7 +27,6 @@ function New-DoctorFixture([string]$Name, [switch]$MissingUv, [switch]$Incomplet
 function Get-GitVersion { 'fixture Git' }
 function Get-NativeToolchain { [pscustomobject]@{ Installation = 'fixture Visual Studio'; CompilerVersion = '19.44.0' } }
 function Get-ASanRuntime { 'fixture AddressSanitizer' }
-function Get-SevenZip { 'fixture 7-Zip' }
 '@
     if (-not $MissingUv) {
         $wrapper = @'
@@ -41,9 +40,15 @@ function uv {
 '@
         Add-Content -LiteralPath $toolchain -Value ($wrapper.Replace('FIXTURE_VERSION', $UvVersion))
     }
-    if (-not $IncompleteLLVM) {
-        Add-Content -LiteralPath $toolchain -Value "function Get-PinnedClangTidy { 'fixture LLVM' }"
+    # Exercise the real interpreter handoff with deterministic machine diagnostics.
+    foreach ($file in @('tools/__init__.py', 'tools/setup/__init__.py')) {
+        [IO.File]::WriteAllText((Join-Path $root $file), '')
     }
+    [IO.File]::WriteAllText((Join-Path $root 'tools/setup/diagnose.py'), @'
+from pathlib import Path
+print((Path(__file__).resolve().parents[2] / 'diagnosis.json').read_text(encoding='utf-8'))
+'@)
+    [IO.File]::WriteAllText((Join-Path $root 'diagnosis.json'), '[{"name":"LLVM analyzer and builtin headers","ok":true,"detail":"fixture LLVM","repair":"Run LLVM setup."}]')
     return $root
 }
 function Invoke-Doctor([string]$Root) {
@@ -105,6 +110,14 @@ try {
     }
     if ((Get-FixtureSnapshot $packages) -ne $snapshot) { throw 'Doctor modified a synchronized environment, lockfile, or persistent cache.' }
     if ($env:UV_PROJECT_ENVIRONMENT -ne (Join-Path $packages 'alternate-environment')) { throw 'Doctor changed the caller uv environment selection.' }
+    [IO.File]::WriteAllText((Join-Path $packages 'diagnosis.json'), '[{"name":"LLVM analyzer and builtin headers","ok":false,"detail":"missing or incomplete","repair":"Run uv run --no-sync python -m tools.setup.llvm."}]')
+    $snapshot = Get-FixtureSnapshot $packages
+    $result = Invoke-Doctor $packages
+    if ($result.ExitCode -ne 1 -or $result.Text -notlike '*LLVM analyzer and builtin headers:*missing or incomplete*' -or $result.Text -notlike '*Next steps:*tools.setup.llvm*') {
+        throw "Doctor did not relay Python diagnostics and repair: $($result.Text)"
+    }
+    if ((Get-FixtureSnapshot $packages) -ne $snapshot) { throw 'Python diagnostics changed the checkout, bytecode, environment, or cache.' }
+    [IO.File]::WriteAllText((Join-Path $packages 'diagnosis.json'), '[]')
     $metadata = Get-ChildItem -LiteralPath $sitePackages -Directory -Filter 'ruff-*.dist-info' | Select-Object -First 1
     if (-not $metadata) { throw 'The doctor fixture needs the installed project ruff package.' }
     $metadataFile = Join-Path $metadata.FullName 'METADATA'
@@ -116,19 +129,6 @@ try {
         throw "Doctor missed an outdated package or its repair: $($result.Text)"
     }
     if ((Get-FixtureSnapshot $packages) -ne $snapshot) { throw 'Doctor modified the outdated environment, lockfile, or persistent cache.' }
-
-    $incomplete = New-DoctorFixture 'incomplete-llvm' -IncompleteLLVM
-    . (Join-Path $incomplete 'tools/setup/environment.ps1')
-    $cache = Get-LocalLLVMDirectory
-    New-Item -ItemType Directory -Path (Join-Path $cache 'bin') -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $cache 'lib/clang') -Force | Out-Null
-    [IO.File]::WriteAllText((Join-Path $cache 'bin/clang-tidy.exe'), 'Must not execute without builtin headers')
-    $snapshot = Get-FixtureSnapshot $incomplete
-    $result = Invoke-Doctor $incomplete
-    if ($result.ExitCode -ne 1 -or $result.Text -notlike '*LLVM analyzer and builtin headers:*missing or incomplete*' -or $result.Text -notlike '*Next steps:*Remove the incomplete .tools/llvm/*tools.setup.llvm*') {
-        throw "Doctor missed an incomplete LLVM cache or its repair: $($result.Text)"
-    }
-    if ((Get-FixtureSnapshot $incomplete) -ne $snapshot) { throw 'Doctor modified the incomplete LLVM cache.' }
 
     # Two partial Visual Studio installations must not combine into one valid toolchain.
     $native = New-DoctorFixture 'split-visual-studio'

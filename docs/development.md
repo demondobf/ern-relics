@@ -50,6 +50,10 @@ Each command has one job:
   If `.venv/` has not been initialized by uv, doctor reports it without creating
   environment files. It checks the repository's `.venv/` even when the caller
   has selected another uv environment.
+  A small PowerShell bootstrap reports missing uv or Python. When the prepared
+  interpreter exists, doctor invokes it directly with bytecode writes disabled
+  to reuse the installers' LLVM, 7-Zip, and Git validation. It never runs either
+  installer. Detailed dependency checks wait until Python has been prepared.
 
 Local development and CI run the same setup commands. Rerun the specific command
 when its dependencies change. Doctor checks tool versions, all required Visual

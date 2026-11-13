@@ -26,7 +26,6 @@ Test-Dependency 'Visual Studio' {
     "MSVC $($toolchain.CompilerVersion), CMake, Ninja, Windows SDK; $($toolchain.Installation)"
 } 'Import .vsconfig into one supported Visual Studio installation using Visual Studio Installer.'
 Test-Dependency 'AddressSanitizer for asan preset' { Get-ASanRuntime } 'Add C++ AddressSanitizer to the selected Visual Studio installation before using the asan preset.'
-Test-Dependency '7-Zip for LLVM setup' { Get-SevenZip } 'Install 7-Zip to extract LLVM.'
 
 $python = Join-Path $projectRoot '.venv/Scripts/python.exe'
 Test-Dependency 'Python and locked packages' {
@@ -47,25 +46,25 @@ Test-Dependency 'Python and locked packages' {
     if ($exitCode -ne 0) { throw "${result}. Run uv sync --locked." }
     'Project environment matches uv.lock'
 } 'Run uv sync --locked.'
-$llvmRepair = if (Test-Path -LiteralPath (Get-LocalLLVMDirectory)) {
-    "Remove the incomplete .tools/llvm/$(Get-PinnedLLVMVersion) directory, then run uv run --no-sync python -m tools.setup.llvm."
-} else { 'Run uv run --no-sync python -m tools.setup.llvm.' }
-Test-Dependency 'LLVM analyzer and builtin headers' { Get-PinnedClangTidy } $llvmRepair
-foreach ($dependency in (Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'sources.lock.json') | ConvertFrom-Json)) {
-    $directory = Join-Path $projectRoot "third_party/$($dependency.Name)"
-    $repair = if (Test-Path -LiteralPath (Join-Path $directory '.git')) {
-        'Review native checkout problems above, then run uv run --no-sync python -m tools.setup.sources.'
-    } else { 'Run uv run --no-sync python -m tools.setup.sources.' }
-    Test-Dependency $dependency.Name {
-        if (-not (Test-Path -LiteralPath (Join-Path $directory '.git'))) { throw 'Missing checkout. Run uv run --no-sync python -m tools.setup.sources.' }
-        $origin = & git -C $directory remote get-url origin
-        if ($LASTEXITCODE -ne 0 -or $origin -ne $dependency.Url) { throw 'Dependency origin differs from sources.lock.json.' }
-        $head = & git -C $directory rev-parse HEAD
-        if ($LASTEXITCODE -ne 0 -or $head -ne $dependency.Commit) { throw 'Dependency commit differs. Run uv run --no-sync python -m tools.setup.sources.' }
-        $changes = & git --no-optional-locks -C $directory status --porcelain
-        if ($LASTEXITCODE -ne 0 -or $changes) { throw 'Dependency has local changes or cannot be inspected.' }
-        $head
-    } $repair
+if (Test-Path -LiteralPath $python -PathType Leaf) {
+    # Invoke the prepared interpreter directly. -B prevents bytecode writes;
+    # no uv run, syncing, downloads, or installer entry points are involved.
+    Push-Location -LiteralPath $projectRoot
+    try {
+        $diagnosis = & $python -B -m tools.setup.diagnose
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot run Python dependency diagnostics.' }
+        foreach ($result in ($diagnosis | ConvertFrom-Json)) {
+            Test-Dependency $result.name {
+                if (-not $result.ok) { throw $result.detail }
+                $result.detail
+            } $result.repair
+        }
+    } catch {
+        $repairs.Add('Repair the project Python environment with uv sync --locked.')
+        Write-Host "[fail] Python dependency diagnostics: $($_.Exception.Message)"
+    } finally {
+        Pop-Location
+    }
 }
 if ($repairs.Count) {
     Write-Host "`nNext steps:"

@@ -35,7 +35,7 @@ Supporting tools are grouped by purpose:
 
 | Directory | Responsibility | Files |
 | --- | --- | --- |
-| `setup/` | Separate Python installers for LLVM and native sources. PowerShell handles early diagnostics and native-shell activation. | `llvm.py`, `sources.py`, `doctor.ps1`, `shell.ps1` |
+| `setup/` | Separate Python installers for LLVM and native sources. Doctor reuses their read-only validation. PowerShell handles the diagnostic bootstrap and native-shell activation. | `llvm.py`, `sources.py`, `diagnose.py`, `doctor.ps1`, `shell.ps1` |
 | `build/` | Coordinate native build/test/package operations, verify the host, and manage staged output with bounded cleanup. | `package.py`, `verify.py`, `output.py` |
 | `checks/` | Run static analysis and checks for layout, source assets, compilation, and notices. | `analyze.py`, `source_assets.py`, Python check modules |
 | `release/` | Share one package manifest, create release ZIPs/checksums, and validate provenance. | `build.py`, `package.py`, `source.py`, `manifest.py` |
@@ -61,6 +61,9 @@ Activate `./tools/setup/shell.ps1` before native builds. Create a release locall
 with `uv run --no-sync python -m tools.release.build`. Each Python command exposes
 `--help`. Doctor stays offline and read-only and can report missing Python or uv before
 the Python environment works.
+Its internal `diagnose.py` bridge uses the prepared interpreter directly with
+`-B`; LLVM and Git validation have one owner shared with the installers. Setup
+still requires running each explicit installation command above.
 
 Tests live under `tests/tooling/` and `tests/integration/` and use Python's standard
 library. Doctor and shell activation retain PowerShell tests. Keep

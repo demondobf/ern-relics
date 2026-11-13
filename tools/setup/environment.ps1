@@ -27,24 +27,6 @@ function Get-UvVersion {
     return $version
 }
 
-function Get-PinnedLLVMVersion {
-    $project = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '../../pyproject.toml')
-    if ($project -notmatch '"clang-format==(\d+\.\d+\.\d+)"') { throw 'Cannot read the clang-format pin in pyproject.toml.' }
-    return $Matches[1]
-}
-
-function Get-LocalLLVMDirectory {
-    return [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../../.tools/llvm/$(Get-PinnedLLVMVersion)"))
-}
-
-function Get-SevenZip {
-    $command = Get-Command 7z -CommandType Application -ErrorAction SilentlyContinue
-    if ($command) { return $command.Source }
-    $installed = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
-    if (Test-Path -LiteralPath $installed) { return $installed }
-    throw 'Install 7-Zip to extract LLVM, then run uv run --no-sync python -m tools.setup.llvm.'
-}
-
 function Get-NativeToolchain {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) { throw 'Install Visual Studio C++ Build Tools and the Windows SDK.' }
@@ -93,18 +75,4 @@ function Get-ASanRuntime($Toolchain = (Get-NativeToolchain)) {
         throw 'AddressSanitizer is missing from the selected compiler. Add the C++ AddressSanitizer component in Visual Studio Installer to use the asan preset.'
     }
     return $runtime
-}
-
-function Get-PinnedClangTidy([string]$Directory = (Get-LocalLLVMDirectory)) {
-    $expected = Get-PinnedLLVMVersion
-    $tidy = Join-Path $Directory 'bin/clang-tidy.exe'
-    $header = Join-Path $Directory "lib/clang/$($expected.Split('.')[0])/include/stddef.h"
-    if (-not (Test-Path -LiteralPath $tidy -PathType Leaf) -or -not (Test-Path -LiteralPath $header -PathType Leaf)) {
-        throw "LLVM $expected is missing or incomplete. Remove .tools/llvm/$expected if present, then run uv run --no-sync python -m tools.setup.llvm."
-    }
-    $version = & $tidy --version
-    if ($LASTEXITCODE -ne 0 -or ($version -join "`n") -notmatch "\bLLVM version $([regex]::Escape($expected))\b") {
-        throw "LLVM does not match version $expected. Remove .tools/llvm/$expected, then run uv run --no-sync python -m tools.setup.llvm."
-    }
-    return $tidy
 }

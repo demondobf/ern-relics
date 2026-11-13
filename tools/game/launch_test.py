@@ -41,7 +41,7 @@ def launch(
         raise ValueError('Keep the test profile and logs outside replaceable package output')
     output.mkdir(parents=True, exist_ok=True)
     profile = output / 'nightreign-relics-test.me3'
-    native = json.dumps((package / 'ern-relics.dll').as_posix())
+    native = json.dumps((package / 'ern-relics.dll').as_posix(), ensure_ascii=False)
     profile.write_text(
         f'profileVersion = "v1"\nsavefile = "ern-relics-test.sl2"\nstart_online = false\n\n[[supports]]\ngame = "nightreign"\n\n[[natives]]\npath = {native}\nload_early = true\n',
         encoding='utf-8',

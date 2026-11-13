@@ -1,9 +1,12 @@
 """Verify explicit game paths, isolated profiles, hidden launch, and save backups."""
 
 import hashlib
+import io
 import json
 import os
+import tomllib
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -73,6 +76,18 @@ class GameToolTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'outside replaceable'):
                 launch(self.package, self.me3, self.game, True, self.package / 'profile')
         self.assertFalse((self.package / 'profile').exists())
+
+    def test_non_bmp_paths_produce_valid_toml(self):
+        package = self.root / 'Package \U0001f9ea'
+        package.mkdir()
+        (package / 'ern-relics.dll').write_bytes(b'fixture DLL')
+        with (
+            patch('tools.game.launch_test.game_running', return_value=False),
+            redirect_stdout(io.StringIO()),
+        ):
+            profile = launch(package, self.me3, self.game, True, self.root / 'Profile \U0001f9ea')
+        content = tomllib.loads(profile.read_text(encoding='utf-8'))
+        self.assertEqual(content['natives'][0]['path'], (package / 'ern-relics.dll').as_posix())
 
     def test_backup_checksums_and_source_bytes(self):
         saves = self.root / 'saves'

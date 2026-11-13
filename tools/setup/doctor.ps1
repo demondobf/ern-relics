@@ -23,8 +23,9 @@ Test-Dependency 'Git' { Get-GitVersion } 'Install Git and reopen the terminal.'
 Test-Dependency 'uv' { Get-UvVersion } 'Resolve the uv version or PATH problem above; reopen the terminal or parent app if needed.'
 Test-Dependency 'Visual Studio' {
     $toolchain = Get-NativeToolchain
-    "MSVC $($toolchain.CompilerVersion), CMake, Ninja, Windows SDK, AddressSanitizer; $($toolchain.Installation)"
+    "MSVC $($toolchain.CompilerVersion), CMake, Ninja, Windows SDK; $($toolchain.Installation)"
 } 'Import .vsconfig into one supported Visual Studio installation using Visual Studio Installer.'
+Test-Dependency 'AddressSanitizer for asan preset' { Get-ASanRuntime } 'Add C++ AddressSanitizer to the selected Visual Studio installation before using the asan preset.'
 Test-Dependency '7-Zip for LLVM setup' { Get-SevenZip } 'Install 7-Zip to extract LLVM.'
 
 $python = Join-Path $projectRoot '.venv/Scripts/python.exe'

@@ -48,16 +48,16 @@ function Get-SevenZip {
 function Get-NativeToolchain {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) { throw 'Install Visual Studio C++ Build Tools and the Windows SDK.' }
-    # Workloads are installer groups; validate the concrete components in one instance.
+    # Shell activation needs the core tools together. CMake validates ASan only
+    # when its preset is selected; doctor reports that capability separately.
     $components = (Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '../../.vsconfig') | ConvertFrom-Json).components |
-        Where-Object { $_ -notlike 'Microsoft.VisualStudio.Workload.*' }
+        Where-Object { $_ -notlike 'Microsoft.VisualStudio.Workload.*' -and $_ -ne 'Microsoft.VisualStudio.Component.VC.ASAN' }
     $installation = & $vswhere -latest -products '*' -version '[17.14,19.0)' -requires $components -property installationPath
     if ($LASTEXITCODE -ne 0 -or -not $installation) {
         $labels = @{
             'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' = 'MSVC C++ tools'
             'Microsoft.VisualStudio.Component.VC.CMake.Project' = 'CMake and Ninja'
             'Microsoft.VisualStudio.Component.Windows11SDK.26100' = 'Windows SDK 10.0.26100'
-            'Microsoft.VisualStudio.Component.VC.ASAN' = 'AddressSanitizer'
         }
         $required = $components | ForEach-Object { if ($labels.ContainsKey($_)) { $labels[$_] } else { $_ } }
         throw "Visual Studio 2022 17.14 or Visual Studio 2026 must include all required components in one installation: $($required -join ', '). Import .vsconfig into Visual Studio Installer."
@@ -83,7 +83,16 @@ function Get-NativeToolchain {
         CMake = $cmake
         Ninja = $ninja
         CompilerVersion = $compilerVersion
+        Compiler = $compiler
     }
+}
+
+function Get-ASanRuntime($Toolchain = (Get-NativeToolchain)) {
+    $runtime = Join-Path (Split-Path -Parent $Toolchain.Compiler) 'clang_rt.asan_dynamic-x86_64.dll'
+    if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) {
+        throw 'AddressSanitizer is missing from the selected compiler. Add the C++ AddressSanitizer component in Visual Studio Installer to use the asan preset.'
+    }
+    return $runtime
 }
 
 function Get-PinnedClangTidy([string]$Directory = (Get-LocalLLVMDirectory)) {

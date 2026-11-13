@@ -26,6 +26,7 @@ function New-DoctorFixture([string]$Name, [switch]$MissingUv, [switch]$Incomplet
     Add-Content -LiteralPath $toolchain -Value @'
 function Get-GitVersion { 'fixture Git' }
 function Get-NativeToolchain { [pscustomobject]@{ Installation = 'fixture Visual Studio'; CompilerVersion = '19.44.0' } }
+function Get-ASanRuntime { 'fixture AddressSanitizer' }
 function Get-SevenZip { 'fixture 7-Zip' }
 '@
     if (-not $MissingUv) {
@@ -155,11 +156,25 @@ try {
         $null = Get-NativeToolchain
         throw 'Shared native validation accepted split Visual Studio components.'
     } catch {
-        if ($_.Exception.Message -notlike '*all required components in one installation*MSVC C++ tools*CMake and Ninja*Windows SDK*AddressSanitizer*') { throw }
+        if ($_.Exception.Message -notlike '*all required components in one installation*MSVC C++ tools*CMake and Ninja*Windows SDK*') { throw }
     }
     $expected = (Get-Content -Raw -LiteralPath (Join-Path $native '.vsconfig') | ConvertFrom-Json).components |
-        Where-Object { $_ -notlike 'Microsoft.VisualStudio.Workload.*' }
-    if (Compare-Object $expected $selectionState.Required) { throw 'Native validation did not request all concrete .vsconfig components together.' }
+        Where-Object { $_ -notlike 'Microsoft.VisualStudio.Workload.*' -and $_ -ne 'Microsoft.VisualStudio.Component.VC.ASAN' }
+    if (Compare-Object $expected $selectionState.Required) { throw 'Native activation did not request the core .vsconfig components together.' }
+    if ($selectionState.Required -contains 'Microsoft.VisualStudio.Component.VC.ASAN') { throw 'Ordinary native activation must not require AddressSanitizer.' }
+
+    $compilerDirectory = Join-Path $native 'compiler'
+    New-Item -ItemType Directory -Path $compilerDirectory -Force | Out-Null
+    $selected = [pscustomobject]@{ Compiler = Join-Path $compilerDirectory 'cl.exe' }
+    try {
+        $null = Get-ASanRuntime $selected
+        throw 'ASan validation accepted a compiler without its runtime.'
+    } catch {
+        if ($_.Exception.Message -notlike '*AddressSanitizer is missing from the selected compiler*') { throw }
+    }
+    $runtime = Join-Path $compilerDirectory 'clang_rt.asan_dynamic-x86_64.dll'
+    [IO.File]::WriteAllText($runtime, 'Fixture runtime is inspected but never executed')
+    if ((Get-ASanRuntime $selected) -ne $runtime) { throw 'ASan validation selected a runtime outside the compiler directory.' }
 } finally {
     $env:PATH = $savedPath
     $env:USERPROFILE = $savedUserProfile

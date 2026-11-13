@@ -11,6 +11,10 @@ newer. Import [.vsconfig](../.vsconfig) into the Visual Studio Installer for the
 C++ build tools, CMake, Ninja, AddressSanitizer, and Windows SDK 10.0.26100
 components. Builds use CMake and Ninja from that Visual Studio installation,
 requiring CMake 3.25 or newer and Ninja 1.11 or newer.
+AddressSanitizer is needed only for the `asan` preset. Ordinary shell activation
+requires the compiler, SDK, CMake, and Ninja; CMake rejects an `asan` build when
+the selected compiler lacks its sanitizer runtime. Doctor reports ASan separately
+while checking the full development environment.
 Install [7-Zip](https://www.7-zip.org/) to extract LLVM. The scripts
 find 7-Zip on `PATH` or in its standard `Program Files` directory.
 

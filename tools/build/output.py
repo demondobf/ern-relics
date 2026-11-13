@@ -36,12 +36,20 @@ def remove_child(root, path):
     if not path.exists():
         return
     pending = [path]
+    checked = []
     while pending:
         current = pending.pop()
         if is_reparse(current):
             raise ValueError(f'Refusing to remove a tree containing reparse points: {current}')
+        checked.append(current)
         if current.is_dir():
             pending.extend(current.iterdir())
+    # copy2 preserves Windows read-only attributes. Validate the entire tree
+    # before making owned output writable or deleting any of it.
+    for current in checked:
+        mode = current.stat().st_mode
+        if not mode & stat.S_IWRITE:
+            current.chmod(mode | stat.S_IWRITE)
     if path.is_dir():
         shutil.rmtree(path)
     else:

@@ -2,6 +2,7 @@
 
 import inspect
 import os
+import stat
 import subprocess
 import unittest
 from pathlib import Path
@@ -84,6 +85,23 @@ class OutputTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             remove_child(self.root / 'dist', self.root)
         self.assertFalse(list((self.root / 'dist').glob('.stage-*')))
+
+    def test_read_only_copies_can_be_replaced_and_rejected_stages_are_cleaned(self):
+        source = self.root / 'config/ern-relics.ini'
+        source.chmod(source.stat().st_mode & ~stat.S_IWRITE)
+        output = write_build_output(self.root, self.runtime, 'ern-relics-1.0.0-dev')
+        (self.runtime / 'ern-relics.dll').write_bytes(b'new DLL')
+
+        def reject(stage):
+            raise RuntimeError('Reject read-only staged package')
+
+        with self.assertRaisesRegex(RuntimeError, 'Reject read-only'):
+            write_build_output(self.root, self.runtime, output.name, reject)
+        self.assertEqual((output / 'ern-relics.dll').read_bytes(), b'first DLL')
+        write_build_output(self.root, self.runtime, output.name)
+        self.assertEqual((output / 'ern-relics.dll').read_bytes(), b'new DLL')
+        self.assertFalse(list((self.root / 'dist').glob('.stage-*')))
+        self.assertFalse(source.stat().st_mode & stat.S_IWRITE)
 
     def test_junctions_are_rejected_before_cleanup(self):
         target = self.root / 'keep'

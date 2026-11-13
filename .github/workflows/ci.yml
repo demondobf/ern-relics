@@ -78,12 +78,12 @@ jobs:
         if: ${{ !inputs.full }}
         run: |
           ./tools/setup/shell.ps1
-          uv run --no-sync python -m tools.build.package --label dev --jobs 4 --build-directory "$env:RUNNER_TEMP/build"
+          uv run --no-sync python -m tools.build.package --jobs 4 --build-directory "$env:RUNNER_TEMP/build"
       - name: Check Release with static analysis
         if: inputs.full
         run: |
           ./tools/setup/shell.ps1
-          uv run --no-sync python -m tools.check --label dev --jobs 4 --build-directory "$env:RUNNER_TEMP/build"
+          uv run --no-sync python -m tools.check --jobs 4 --build-directory "$env:RUNNER_TEMP/build"
 
   asan:
     name: AddressSanitizer checks

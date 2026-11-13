@@ -14,7 +14,6 @@ from tools.setup.native import require_native_shell
 
 def build(
     preset='release',
-    label='dev',
     build_directory=None,
     jobs=0,
     root=ROOT,
@@ -24,8 +23,6 @@ def build(
 ):
     if preset not in ('release', 'debug', 'asan') or jobs < 0 or jobs > 1024:
         raise ValueError('Invalid native preset or job count')
-    if label and not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', label):
-        raise ValueError('Invalid development label')
     require_native_shell()
     directory = safe_path(
         build_directory if build_directory is not None else root / '.build' / preset
@@ -52,12 +49,7 @@ def build(
     version = re.search(r'^CMAKE_PROJECT_VERSION:STATIC=(.+)$', cache, re.M)
     if not version:
         raise ValueError('Cannot read the configured project version')
-    name = (
-        f'ern-relics-{version[1]}'
-        + (f'-{preset}' if preset != 'release' else '')
-        + (f'-{label}' if label and label != 'dev' else '')
-        + ('-dev' if label else '')
-    )
+    name = f'ern-relics-{version[1]}' + (f'-{preset}' if preset != 'release' else '') + '-dev'
     package = write_build_output(
         root,
         directory / 'runtime',
@@ -71,7 +63,6 @@ def build(
 
 def arguments(parser):
     parser.add_argument('--preset', choices=('release', 'debug', 'asan'), default='release')
-    parser.add_argument('--label', default='dev')
     parser.add_argument('--build-directory', type=Path)
     parser.add_argument(
         '--package-directory',
@@ -86,7 +77,6 @@ def main():
     args = arguments(argparse.ArgumentParser(description=__doc__)).parse_args()
     build(
         args.preset,
-        args.label,
         args.build_directory,
         args.jobs,
         package_directory=args.package_directory,

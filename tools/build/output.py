@@ -80,8 +80,8 @@ def move_new(root, source, destination):
 
 
 def write_build_output(root, runtime, name, validate=None, *, destination=None):
-    if not re.fullmatch(r'ern-relics-\d+\.\d+\.\d+(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?', name):
-        raise ValueError('Invalid package name')
+    if not re.fullmatch(r'ern-relics-\d+\.\d+\.\d+(?:-debug)?-dev', name):
+        raise ValueError('Build output must use a development package name')
     root = safe_path(root)
     output = safe_path(destination if destination is not None else root / 'dist' / name)
     dist = output.parent
@@ -91,7 +91,7 @@ def write_build_output(root, runtime, name, validate=None, *, destination=None):
             shutil.copy2(root / source, stage / filename)
         if validate is not None:
             validate(stage)
-        if destination is not None or not name.endswith('-dev'):
+        if destination is not None:
             move_new(dist, stage, output)
         else:
             remove_child(dist, output)

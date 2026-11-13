@@ -9,7 +9,6 @@ from tools.process import ROOT, cli, python_tool, run
 
 def check(
     preset='release',
-    label='dev',
     build_directory=None,
     jobs=0,
     root=ROOT,
@@ -20,7 +19,6 @@ def check(
     format_sources(root=root)
     package = build(
         preset,
-        label,
         build_directory,
         jobs,
         root,
@@ -38,7 +36,6 @@ def main():
     args = arguments(argparse.ArgumentParser(description=__doc__)).parse_args()
     check(
         args.preset,
-        args.label,
         args.build_directory,
         args.jobs,
         package_directory=args.package_directory,

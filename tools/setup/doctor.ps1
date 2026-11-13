@@ -72,4 +72,4 @@ if ($repairs.Count) {
     $repairs | Select-Object -Unique | ForEach-Object { Write-Host "- $_" }
     exit 1
 }
-Write-Host 'Dependencies are ready. Activate tools/setup/shell.ps1, then run uv run --no-sync python -m tools.check --label dev.'
+Write-Host 'Dependencies are ready. Activate tools/setup/shell.ps1, then run uv run --no-sync python -m tools.check.'

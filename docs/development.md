@@ -116,7 +116,7 @@ For all Python/C++ formatting followed by the full project check:
 
 ```powershell
 uv run --no-sync python -m tools.format --fix
-uv run --no-sync python -m tools.check --label dev
+uv run --no-sync python -m tools.check
 ```
 
 The full check adds Python lint and static analysis to the build, tests, and
@@ -127,20 +127,16 @@ packaged DLL verification. Use `--jobs <count>` to limit parallelism.
 Build a runnable development package:
 
 ```powershell
-uv run --no-sync python -m tools.build.package --label dev
+uv run --no-sync python -m tools.build.package
 ```
 
 The build runs CTest and checks the packaged DLL in the synthetic DX12 host.
 Output goes to `dist/ern-relics-<version>-dev/`. Reuse that directory while
 iterating. Keep installed configuration, presets, and journals elsewhere, since a
 rebuild replaces the package. Preserve versioned release packages and ZIPs.
-Both `tools.build.package` and `tools.check` default to the `dev` label. An
-explicit empty label creates an unlabelled package but refuses to replace an
-existing versioned release directory.
-Development output always ends in `-dev`, including custom labels such as
-`--label feature`, which creates `ern-relics-<version>-feature-dev/`. Release
-versions cannot use the reserved `-dev` suffix. Stable and prerelease packages
-are both protected from replacement.
+Build commands always create development output ending in `-dev`. Debug builds
+use `ern-relics-<version>-debug-dev/`. Only release commands create frozen
+versioned packages. Release versions cannot use the reserved `-dev` suffix.
 
 The Python package builder uses the activated Windows shell and the same
 `.build/<preset>/` directory as native commands. It verifies the production DLL
@@ -212,7 +208,7 @@ synthetic host:
 
 ```powershell
 $ernBuild = Join-Path $env:TEMP 'ern-relics-dev'
-uv run --no-sync python -m tools.build.package --label dev --build-directory $ernBuild
+uv run --no-sync python -m tools.build.package --build-directory $ernBuild
 & (Join-Path $ernBuild 'ern-relics-host.exe')
 ```
 

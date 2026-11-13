@@ -21,9 +21,9 @@ available. Native presets reuse `.build/<preset>/`.
 Python modules combine project-specific operations where needed:
 
 - `uv run --no-sync python -m tools.format --fix` formats all Python and C++ source files.
-- `uv run --no-sync python -m tools.build.package --label dev` builds, tests, and
+- `uv run --no-sync python -m tools.build.package` builds, tests, and
   validates a runnable package from the activated native shell.
-- `uv run --no-sync python -m tools.check --label dev` also checks lint, formatting,
+- `uv run --no-sync python -m tools.check` also checks lint, formatting,
   and static analysis.
 
 Run `uv sync --locked` before these commands. `--no-sync` prevents implicit

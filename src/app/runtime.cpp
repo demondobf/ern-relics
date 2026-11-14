@@ -117,8 +117,7 @@ void Runtime::refresh_memory() {
                 log("Character unloaded. Drafts and Undo cleared.");
             }
             location_ = EditLocation::NotLoaded;
-            inspection_ = InspectionMessage{
-                "Load your character and enter Roundtable Hold to inspect relics."};
+            inspection_ = InspectionMessage{"Load a character to use the relic editor."};
             break;
         case ReadFailure::Unreadable:
             inspection_ = InspectionMessage{

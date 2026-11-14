@@ -483,6 +483,62 @@ void glyph_bounds(float height) {
     Frame::end();
 }
 
+void menu_transition(float height) {
+    const auto loaded = fixture(false, false);
+    auto view = loaded;
+    view.hotkey_name = "F8";
+    view.session.value = 1;
+    view.location = ern::EditLocation::NotLoaded;
+    view.lock_reason = ern::location_lock_reason(view.location);
+    view.inspection = ern::InspectionMessage{"Load a character to use the relic editor."};
+    view.drafts = {};
+    view.review = {};
+    const auto menu = view;
+    Frame frame(height, view);
+    ern::EditorUi ui;
+    ui.initialize(view, height);
+    unsigned char *pixels = nullptr;
+    int width = 0, atlas_height = 0;
+    ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&pixels, &width, &atlas_height);
+    std::optional<ern::EditorAction> action;
+    bool open = true;
+    const auto draw = [&] {
+        std::string text;
+        for (int i = 0; i < 3; ++i) {
+            ImGui::NewFrame();
+            ImGui::LogToBuffer();
+            ui.draw(view, false, action, open);
+            text = ImGui::GetCurrentContext()->LogBuffer.c_str();
+            ImGui::LogFinish();
+            ImGui::Render();
+        }
+        require(!action && open, "Rendering the menu transition changed editor state");
+        return text;
+    };
+    const auto check_menu = [&] {
+        const auto text = draw();
+        require(text.find("Character not loaded") != std::string::npos &&
+                    text.find("Load a character to use the relic editor.") != std::string::npos,
+                "The title menu did not explain how to open the relic editor");
+        require(child("##notification").Active,
+                "The title menu did not retain the editing lock notice");
+        for (const auto *window : ImGui::GetCurrentContext()->Windows)
+            require(!window->Active || (!std::strstr(window->Name, "/relic-grid_") &&
+                                        !std::strstr(window->Name, "/effect-browser_")),
+                    "Unloading a character left relic controls visible");
+    };
+    check_menu();
+    view = loaded;
+    view.session.value = 2;
+    view.location = ern::EditLocation::RoundtableHold;
+    draw();
+    require(child("/effect-browser_").Active && !child("##notification").Active,
+            "Loading a character in Roundtable did not restore the editor");
+    view = menu;
+    view.session.value = 3;
+    check_menu();
+}
+
 void read_only_and_pending(float height) {
     auto view = fixture(false, true);
     view.hotkey_name = "F8";
@@ -1310,6 +1366,7 @@ int main() {
                 preset_padding(height);
                 preset_replacement(height);
                 glyph_bounds(height);
+                menu_transition(height);
                 read_only_and_pending(height);
                 locked_relic_grid(height);
                 diagnostics_above_notifications(height);

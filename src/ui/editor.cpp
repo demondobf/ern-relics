@@ -640,7 +640,9 @@ void draw_editor(const EditorView &rt, std::optional<EditorAction> &action, Edit
                 empty_state(appearance, "No relic equipped", "Equip a relic through Relic Rites.");
         }
     } else
-        empty_state(appearance, "Relics unavailable",
+        empty_state(appearance,
+                    rt.location == EditLocation::NotLoaded ? "Character not loaded"
+                                                           : "Relics unavailable",
                     std::get<InspectionMessage>(rt.inspection).text.c_str());
     ImGui::EndChild();
     ImGui::SetCursorPosY(footer_y);

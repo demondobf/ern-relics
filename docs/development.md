@@ -272,6 +272,50 @@ This is the source asset check's only image exception. Record their source and
 usage terms in [the screenshot notes](screenshots/README.md). Screenshots are not
 included in mod packages.
 
+## Repository protection
+
+The public repository accepts issues and forks. PR creation is limited to
+collaborators and authorized automation. Keep pull requests enabled for
+Dependabot and Release Please.
+
+Protect `main`, including administrators, with required PRs and the GitHub Actions
+checks **Quick checks** and **Windows checks**. Require branches to be up to date
+and conversations to be resolved. Block force pushes and branch deletion.
+Require zero approving reviews so the sole maintainer can merge checked PRs.
+Documentation-only changes can skip **Windows checks**; GitHub accepts skipped
+required checks. Do not require the manually selected AddressSanitizer job.
+
+Keep Dependabot alerts, security updates, secret scanning, and push protection
+enabled. Require workflow approval for all external contributors. Keep default
+workflow permissions read-only and allow GitHub Actions to create PRs for
+Release Please.
+
+GitHub leaves the optional non-provider pattern and validity-check settings
+disabled on this personal repository. The settings audit checks the enabled
+baseline above. [Validity checks](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/customize-leak-detection/enable-validity-checks)
+require an eligible organization repository with GitHub Secret Protection.
+
+[Dependabot](../.github/dependabot.yml) checks Python dependencies and GitHub
+Actions weekly, including the shared native setup action. Native commits in
+`sources.lock.json`, tool versions in workflow inputs, and the LLVM archive pin
+still need manual updates.
+
+With an authenticated GitHub CLI account that has repository administration
+access, verify the live settings:
+
+```powershell
+uv run --no-sync python -m tools.ci.check_repository
+```
+
+This command only reads settings. It needs network access and is separate from
+ordinary CI, whose token has no administration permission. For a fork, pass
+`--repository <owner>/<repo>`.
+
+The `main` protection does not apply to release branches or version tags.
+Release Please uses its existing write permissions to update its release PR and
+create a tag and release after the maintainer merges that PR. It has no bypass
+for `main`; its PR must pass the same required checks.
+
 ## Releases
 
 Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
@@ -291,6 +335,9 @@ GitHub requires approval before running CI on PRs created or updated with
 `GITHUB_TOKEN`. On the release PR, select **Approve workflows to run** before
 merging. You can also run **CI > Run workflow** on the release PR's branch. See
 [GitHub's workflow trigger rules](https://docs.github.com/en/actions/concepts/security/github_token#when-github_token-triggers-workflow-runs).
+
+If the release PR is behind `main`, update its branch before running checks.
+Branch protection requires both checks on the up-to-date branch before merging.
 
 Merging the release PR creates a `v<version>` tag and GitHub Release. The
 [Release workflow](../.github/workflows/release.yml) runs on pushes to `main` or

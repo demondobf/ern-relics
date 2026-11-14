@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/setup-native
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci

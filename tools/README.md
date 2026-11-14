@@ -39,7 +39,7 @@ Supporting tools are grouped by purpose:
 | `build/` | Coordinate native build/test/package operations, verify the host, and manage staged output with bounded cleanup. | `package.py`, `verify.py`, `output.py` |
 | `checks/` | Run static analysis and checks for layout, source assets, compilation, and notices. | `analyze.py`, `source_assets.py`, Python check modules |
 | `release/` | Share one package manifest, create release ZIPs/checksums, and validate provenance. | `build.py`, `package.py`, `source.py`, `manifest.py` |
-| `ci/` | Select CI checks from the changed files. | `changes.py` |
+| `ci/` | Select CI checks from changed files and audit live GitHub protection settings. | `changes.py`, `check_repository.py` |
 | `assets/` | Extract and audit locally supplied game data. | `extract.py`, `verify_assets.py`, `verify_regulation.py` |
 | `game/` | Back up explicit saves, launch an offline test profile, and run game diagnostics. | `backup_saves.py`, `launch_test.py`, `probe.py`, `verify_refresh.py` |
 

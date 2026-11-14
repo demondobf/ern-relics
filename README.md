@@ -88,6 +88,12 @@ the Diagnostics message, and relevant lines from `ern-relics.log`.
 
 ## Contribute
 
+Bug reports and feature requests are welcome through
+[GitHub Issues](https://github.com/demondobf/ern-relics/issues). You can fork the
+project and maintain your own changes under the MIT license. External pull
+requests are not accepted; PR creation is restricted to repository collaborators
+and authorized automation.
+
 The [development guide](docs/development.md) covers setup, builds, and testing.
 The [architecture overview](docs/architecture.md) maps the code and runtime flow.
 

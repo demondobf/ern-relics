@@ -32,22 +32,41 @@ function Get-NativeToolchain {
     if (-not (Test-Path -LiteralPath $vswhere)) { throw 'Install Visual Studio C++ Build Tools and the Windows SDK.' }
     # Shell activation needs the core tools together. CMake validates ASan only
     # when its preset is selected; doctor reports that capability separately.
-    $components = (Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '../../.vsconfig') | ConvertFrom-Json).components |
-        Where-Object { $_ -notlike 'Microsoft.VisualStudio.Workload.*' -and $_ -ne 'Microsoft.VisualStudio.Component.VC.ASAN' }
-    $installation = & $vswhere -latest -products '*' -version '[17.14,19.0)' -requires $components -property installationPath
-    if ($LASTEXITCODE -ne 0 -or -not $installation) {
+    $config = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '../../.vsconfig') | ConvertFrom-Json
+    $pinned = @($config.components | Where-Object { $_ -match '^Microsoft\.VisualStudio\.Component\.VC\.14\.\d+\.x86\.x64$' })
+    if ($pinned.Count -ne 1) { throw '.vsconfig must select one versioned MSVC x64/x86 component.' }
+    $toolset = ($pinned[0] -split '\.')[4..5] -join '.'
+    # A runner's default toolset may have only the generic component registered.
+    # Require the core components together, then inspect installed toolset files.
+    $components = $config.components | Where-Object {
+        $_ -notlike 'Microsoft.VisualStudio.Workload.*' -and
+        $_ -ne 'Microsoft.VisualStudio.Component.VC.ASAN' -and $_ -ne $pinned[0]
+    }
+    $installations = & $vswhere -sort -products '*' -version '[18.6,19.0)' -requires $components -property installationPath
+    if ($LASTEXITCODE -ne 0) { throw 'Visual Studio discovery failed.' }
+    $installation = $null
+    $selected = $null
+    foreach ($candidate in $installations) {
+        $directory = Join-Path $candidate 'VC/Tools/MSVC'
+        if (-not (Test-Path -LiteralPath $directory)) { continue }
+        $selected = Get-ChildItem -LiteralPath $directory -Directory |
+            Where-Object { $_.Name -match "^$([regex]::Escape($toolset))\.\d+$" } |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+        if ($selected) { $installation = $candidate; break }
+    }
+    if (-not $installation) {
         $labels = @{
             'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' = 'MSVC C++ tools'
             'Microsoft.VisualStudio.Component.VC.CMake.Project' = 'CMake and Ninja'
             'Microsoft.VisualStudio.Component.Windows11SDK.26100' = 'Windows SDK 10.0.26100'
         }
         $required = $components | ForEach-Object { if ($labels.ContainsKey($_)) { $labels[$_] } else { $_ } }
-        throw "Visual Studio 2022 17.14 or Visual Studio 2026 must include all required components in one installation: $($required -join ', '). Import .vsconfig into Visual Studio Installer."
+        throw "Visual Studio 2026 must include all required components in one installation: $($required -join ', '), MSVC toolset $toolset. Import .vsconfig into Visual Studio Installer."
     }
-    $default = (Get-Content -LiteralPath (Join-Path $installation 'VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt')).Trim()
-    $compiler = Join-Path $installation "VC/Tools/MSVC/$default/bin/Hostx64/x64/cl.exe"
+    $compiler = Join-Path $selected.FullName 'bin/Hostx64/x64/cl.exe'
     $compilerVersion = (Get-Item -LiteralPath $compiler).VersionInfo.FileVersion
-    if ($compilerVersion -notmatch '^(\d+\.\d+\.\d+)' -or [version]$Matches[1] -lt [version]'19.44.0') { throw "MSVC 19.44 or newer required; found $compilerVersion" }
+    $expected = $toolset -replace '^14\.', '19.'
+    if ($compilerVersion -notlike "$expected.*") { throw "MSVC $expected required; found $compilerVersion" }
     $cmake = Join-Path $installation 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe'
     if (-not (Test-Path -LiteralPath $cmake)) { throw 'Visual Studio CMake is missing. Import .vsconfig into Visual Studio Installer.' }
     $ninja = Join-Path $installation 'Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe'
@@ -66,6 +85,7 @@ function Get-NativeToolchain {
         Ninja = $ninja
         CompilerVersion = $compilerVersion
         Compiler = $compiler
+        ToolsetVersion = $selected.Name
     }
 }
 

@@ -6,7 +6,9 @@ $savedPath = $env:PATH
 $savedVersion = $env:VSCMD_VER
 $savedArchitecture = $env:VSCMD_ARG_TGT_ARCH
 $savedSdk = $env:WindowsSDKVersion
+$savedToolset = $env:VCToolsVersion
 $caller = (Get-Location).Path
+$activation = [pscustomobject]@{ WrongCompiler = $false; WrongSdk = $false }
 
 # Exercise the activation script without loading or installing Visual Studio.
 function Import-Module {
@@ -18,12 +20,20 @@ function Import-Module {
 function Enter-VsDevShell {
     param($VsInstallPath, [switch]$SkipAutomaticLocation, $DevCmdArguments)
     if ($VsInstallPath -ne (Join-Path $fixture 'Visual Studio') -or -not $SkipAutomaticLocation -or
-        $DevCmdArguments -cne '-arch=amd64 -host_arch=amd64 -winsdk=10.0.26100.0') {
+        $DevCmdArguments -cne '-arch=amd64 -host_arch=amd64 -winsdk=10.0.26100.0 -vcvars_ver=14.51.300') {
         throw 'Activation did not select x64 tools, the pinned SDK, and the caller directory.'
     }
     $env:VSCMD_VER = 'fixture'
     $env:VSCMD_ARG_TGT_ARCH = 'x64'
     $env:WindowsSDKVersion = '10.0.26100.0\'
+    if ($activation.WrongSdk) { $env:WindowsSDKVersion = '10.0.99999.0\' }
+    $env:VCToolsVersion = '14.51.300'
+}
+function Get-Command {
+    param($Name, $CommandType, $ErrorAction)
+    if ($Name -ne 'cl') { throw 'Unexpected command lookup in activation fixture.' }
+    $compiler = if ($activation.WrongCompiler) { 'Other compiler/cl.exe' } else { 'Visual Studio/compiler/cl.exe' }
+    [pscustomobject]@{ Source = Join-Path $fixture $compiler }
 }
 try {
     $setup = Join-Path $fixture 'tools/setup'
@@ -36,7 +46,9 @@ function Get-NativeToolchain {
         Installation = Join-Path $fixture 'Visual Studio'
         CMake = Join-Path $fixture 'CMake bin/cmake.exe'
         Ninja = Join-Path $fixture 'Ninja bin/ninja.exe'
-        CompilerVersion = '19.44'
+        CompilerVersion = '19.51.300'
+        Compiler = Join-Path $fixture 'Visual Studio/compiler/cl.exe'
+        ToolsetVersion = '14.51.300'
     }
 }
 '@)
@@ -55,11 +67,23 @@ function Get-NativeToolchain {
             throw 'Activation must prefer the selected bundled CMake and Ninja.'
         }
     }
+    foreach ($failure in @('WrongCompiler', 'WrongSdk')) {
+        $activation.$failure = $true
+        try {
+            & (Join-Path $setup 'shell.ps1')
+            throw "Activation accepted $failure."
+        } catch {
+            if ($_.Exception.Message -notlike '*did not activate the selected compiler and SDK*') { throw }
+        } finally {
+            $activation.$failure = $false
+        }
+    }
 } finally {
     $env:PATH = $savedPath
     $env:VSCMD_VER = $savedVersion
     $env:VSCMD_ARG_TGT_ARCH = $savedArchitecture
     $env:WindowsSDKVersion = $savedSdk
+    $env:VCToolsVersion = $savedToolset
     Remove-TemporaryDirectory $fixture
 }
 Write-Host 'PASS: native shell activation selects one x64 toolchain and SDK, preserves the caller directory, and avoids duplicate PATH entries.'

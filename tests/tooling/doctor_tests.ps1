@@ -14,7 +14,7 @@ $savedUvEnvironment = $env:UV_PROJECT_ENVIRONMENT
 $env:UV_PROJECT_ENVIRONMENT = $null
 $mockVswhere = $null
 
-function New-DoctorFixture([string]$Name, [switch]$MissingUv, [string]$UvVersion = '0.13.7') {
+function New-DoctorFixture([string]$Name, [switch]$MissingUv, [string]$UvVersion = '0.13.8') {
     $root = Join-Path $temporaryRoot $Name
     New-Item -ItemType Directory -Path (Join-Path $root 'tools/setup') -Force | Out-Null
     foreach ($file in @('tools/setup/doctor.ps1', 'tools/setup/environment.ps1', 'pyproject.toml', 'uv.lock', '.python-version')) {
@@ -139,11 +139,12 @@ try {
     $mockVswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     New-Item -ItemType Directory -Path (Split-Path -Parent $mockVswhere) -Force | Out-Null
     [IO.File]::WriteAllText($mockVswhere, 'Must use the mocked discovery command')
-    $selectionState = [pscustomobject]@{ Required = @() }
+    $selectionState = [pscustomobject]@{ Required = @(); Installations = @() }
     Set-Item -Path "Function:$mockVswhere" -Value {
-        param([switch]$latest, $products, $version, [string[]]$requires, $property)
+        param([switch]$sort, $products, $version, [string[]]$requires, $property)
         $selectionState.Required = $requires
         $global:LASTEXITCODE = 0
+        if ($selectionState.Installations.Count) { return $selectionState.Installations }
         $partialInstalls = @(
             @('Microsoft.VisualStudio.Component.VC.Tools.x86.x64', 'Microsoft.VisualStudio.Component.Windows11SDK.26100'),
             @('Microsoft.VisualStudio.Component.VC.CMake.Project', 'Microsoft.VisualStudio.Component.VC.ASAN')
@@ -159,9 +160,51 @@ try {
         if ($_.Exception.Message -notlike '*all required components in one installation*MSVC C++ tools*CMake and Ninja*Windows SDK*') { throw }
     }
     $expected = (Get-Content -Raw -LiteralPath (Join-Path $native '.vsconfig') | ConvertFrom-Json).components |
-        Where-Object { $_ -notlike 'Microsoft.VisualStudio.Workload.*' -and $_ -ne 'Microsoft.VisualStudio.Component.VC.ASAN' }
+        Where-Object { $_ -notlike 'Microsoft.VisualStudio.Workload.*' -and $_ -ne 'Microsoft.VisualStudio.Component.VC.ASAN' -and $_ -notmatch '^Microsoft\.VisualStudio\.Component\.VC\.14\.\d+\.x86\.x64$' }
     if (Compare-Object $expected $selectionState.Required) { throw 'Native activation did not request the core .vsconfig components together.' }
     if ($selectionState.Required -contains 'Microsoft.VisualStudio.Component.VC.ASAN') { throw 'Ordinary native activation must not require AddressSanitizer.' }
+
+    # A newer installation/default must not override the selected toolset family.
+    $older = Join-Path $native 'Visual Studio stable'
+    $newer = Join-Path $native 'Visual Studio newer'
+    $selectionState.Installations = @($newer, $older)
+    $toolsetDirectories = @(
+        (Join-Path $newer 'VC/Tools/MSVC/14.52.900'),
+        (Join-Path $older 'VC/Tools/MSVC/14.51.100'),
+        (Join-Path $older 'VC/Tools/MSVC/14.51.300')
+    )
+    foreach ($directory in $toolsetDirectories) {
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    }
+    $compiler = Join-Path $toolsetDirectories[-1] 'bin/Hostx64/x64/cl.exe'
+    function Get-Item {
+        param($LiteralPath)
+        if ($LiteralPath -ne $compiler) { throw 'Discovery inspected a compiler outside the pinned toolset.' }
+        [pscustomobject]@{ VersionInfo = [pscustomobject]@{ FileVersion = '19.51.300.0' } }
+    }
+    $cmake = Join-Path $older 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe'
+    $ninja = Join-Path $older 'Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe'
+    foreach ($executable in @($cmake, $ninja)) {
+        New-Item -ItemType Directory -Path (Split-Path -Parent $executable) -Force | Out-Null
+        [IO.File]::WriteAllText($executable, 'Must use the mocked version command')
+    }
+    Set-Item -Path "Function:$cmake" -Value { 'cmake version 3.31.0'; $global:LASTEXITCODE = 0 }
+    Set-Item -Path "Function:$ninja" -Value { '1.13.0'; $global:LASTEXITCODE = 0 }
+    try {
+        $toolchain = Get-NativeToolchain
+        if ($toolchain.Installation -ne $older -or $toolchain.ToolsetVersion -ne '14.51.300' -or $toolchain.Compiler -ne $compiler) {
+            throw 'Discovery did not choose the newest servicing toolset in the pinned family.'
+        }
+        $selectionState.Installations = @($newer)
+        try {
+            $null = Get-NativeToolchain
+            throw 'Discovery silently substituted a newer toolset.'
+        } catch {
+            if ($_.Exception.Message -notlike '*MSVC toolset 14.51*Import .vsconfig*') { throw }
+        }
+    } finally {
+        Remove-Item -LiteralPath 'Function:Get-Item', "Function:$cmake", "Function:$ninja"
+    }
 
     $compilerDirectory = Join-Path $native 'compiler'
     New-Item -ItemType Directory -Path $compilerDirectory -Force | Out-Null

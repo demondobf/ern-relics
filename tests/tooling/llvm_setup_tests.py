@@ -73,9 +73,12 @@ class LLVMSetupTests(unittest.TestCase):
             destination.write_bytes(payload)
 
         def extract(arguments, **options):
+            if Path(arguments[2]).suffix != '.tar':
+                return
             expanded = Path(
                 next(argument[2:] for argument in arguments if str(argument).startswith('-o'))
             )
+            expanded /= f'clang+llvm-{llvm.VERSION}-x86_64-pc-windows-msvc'
             (expanded / 'bin').mkdir(parents=True)
             (expanded / 'bin/clang-tidy.exe').write_bytes(b'analyzer fixture')
 
@@ -90,7 +93,8 @@ class LLVMSetupTests(unittest.TestCase):
             self.assertTrue((directory / 'bin/clang-tidy.exe').is_file())
             llvm.setup(self.root)
             self.assertEqual(fetch.call_count, 1)
-            self.assertEqual(extraction.call_count, 1)
+            self.assertEqual(extraction.call_count, 2)
+            self.assertTrue(fetch.call_args.args[0].endswith('-windows-msvc.tar.zst'))
         self.assertEqual(list(directory.parent.iterdir()), [directory])
 
 

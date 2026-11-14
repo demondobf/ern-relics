@@ -6,10 +6,10 @@ The [tools guide](../tools/README.md) describes the directory layout and entry p
 ## Set up
 
 Install Git and [uv](https://docs.astral.sh/uv/getting-started/installation/).
-Use Visual Studio 2022 17.14 or newer, or Visual Studio 2026, with MSVC 19.44 or
-newer. Import [.vsconfig](../.vsconfig) into the Visual Studio Installer for the
-C++ build tools, CMake, Ninja, AddressSanitizer, and Windows SDK 10.0.26100
-components. Builds use CMake and Ninja from that Visual Studio installation,
+Use Visual Studio 2026, including the standalone Build Tools edition, with
+MSVC toolset 14.51, compiler 19.51. Import [.vsconfig](../.vsconfig) into Visual
+Studio Installer for the C++ build tools, CMake, Ninja, AddressSanitizer, and
+Windows SDK 10.0.26100 components. Builds use CMake and Ninja from that installation,
 requiring CMake 3.25 or newer and Ninja 1.11 or newer.
 AddressSanitizer is needed only for the `asan` preset. Ordinary shell activation
 requires the compiler, SDK, CMake, and Ninja; CMake rejects an `asan` build when
@@ -36,7 +36,7 @@ Each command has one job:
 
 - `uv sync --locked` prepares managed Python and locked Python packages in `.venv/`.
 - [LLVM setup](../tools/setup/llvm.py) installs pinned clang-tidy and builtin
-  headers under `.tools/llvm/<version>/`. It checks the download checksum and
+  headers under `.tools/llvm/<version>/`. It checks the archive checksum and
   reuses a matching installation. It needs 7-Zip, with no administrator access
   or PATH changes. Builds use only this repository-managed LLVM installation.
 - [Native-source setup](../tools/setup/sources.py) fetches the Git commits in
@@ -80,7 +80,17 @@ and Ninja once per PowerShell session:
 ```
 
 This changes only the current process environment. It selects the x64 compiler
-and Windows SDK 10.0.26100 and keeps the caller directory unchanged.
+from the MSVC toolset pinned in `.vsconfig`, plus Windows SDK 10.0.26100, and keeps
+the caller directory unchanged. Local builds, CI, and releases use this same
+selection. The pin follows a stable toolset supplied by the hosted Windows runner
+so CI does not install a separate compiler. Newer defaults do not override the pin. Servicing patches
+within the selected toolset are allowed, so matching toolsets do not guarantee
+identical package hashes.
+
+After changing toolsets, reconfigure each existing build directory once with
+`cmake --fresh --preset release`, replacing `release` with `debug` or `asan` as
+needed. This clears CMake's cached compiler selection without replacing packages
+in `dist/`. CMake rejects a compiler from another toolset.
 
 Use CMake and CTest directly:
 
@@ -245,7 +255,12 @@ Keep dependency changes with [sources.lock.json](../sources.lock.json) or
 `uv sync --locked`. Update [ThirdPartyNotices.txt](../ThirdPartyNotices.txt) when distributed
 code or attribution changes.
 
-When changing the clang-format pin, update the matching LLVM installer checksum
+To update the compiler, change the versioned MSVC component in `.vsconfig`, import
+it into Visual Studio Installer, and activate a fresh PowerShell session. Select a
+stable toolset available on the CI runner. Shell activation and CMake read this
+same pin. Verify Release, clang-tidy, and AddressSanitizer before merging.
+
+When changing the clang-format pin, update the matching LLVM archive checksum
 in [the LLVM setup script](../tools/setup/llvm.py).
 
 Keep game assets, saves, extracted data, and proprietary decoders out of version

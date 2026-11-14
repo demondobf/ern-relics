@@ -17,8 +17,12 @@ BUNDLED_LICENSES = {
 }
 PROJECT_LICENSE_HASH = 'f222689b98a176b0fe2c36adb795b8aef7f0de1f8c43548863c6992a780520dd'
 EMBEDDED_MIT_FILES = ('imstb_rectpack.h', 'imstb_textedit.h', 'imstb_truetype.h')
-# ProggyClean has no standalone license file in the ImGui build inputs.
-PROGGYCLEAN_COPYRIGHT = 'Copyright (c) 2004, 2005 Tristan Grimmer'
+# Embedded fonts have no standalone license files in the ImGui build inputs.
+EMBEDDED_FONT_COPYRIGHTS = (
+    'Copyright (c) 2004, 2005 Tristan Grimmer',
+    'Copyright (c) 2026 Disco Hello',
+    'Copyright (c) 2019,2023 Tristan Grimmer',
+)
 JAPANESE_GLYPH_CREDITS = (
     'List of Joyo Kanji by the Agency for Cultural Affairs',
     'https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/',
@@ -100,10 +104,11 @@ def check(root):
 
     fields, body = notices['mit']
     if (
-        fields.keys() != {'Component', 'License', 'imgui', 'proggyclean', 'stb', 'bcdec'}
+        fields.keys()
+        != {'Component', 'License', 'imgui', 'proggyclean', 'proggyforever', 'stb', 'bcdec'}
         or fields['License'] != 'MIT'
     ):
-        raise ValueError('Shared MIT notice must cover ImGui, ProggyClean, stb, and bcdec')
+        raise ValueError('Shared MIT notice must cover ImGui, its embedded fonts, stb, and bcdec')
     _, terms = mit_parts(project_license)
     copyrights = []
     for name in ('imgui', 'bcdec'):
@@ -122,7 +127,11 @@ def check(root):
         if stb_terms != terms:
             raise ValueError(f'{filename}: upstream MIT terms differ from the shared notice')
         copyrights += stb_copyrights
-    copyrights.append(PROGGYCLEAN_COPYRIGHT)
+    draw = (root / 'third_party/imgui/imgui_draw.cpp').read_text(encoding='utf-8')
+    for credit in EMBEDDED_FONT_COPYRIGHTS:
+        if credit not in draw:
+            raise ValueError(f'Missing or changed embedded font attribution: {credit}')
+        copyrights.append(credit)
     actual_copyrights, actual_terms = mit_parts(body)
     if (
         sorted(actual_copyrights) != sorted(set(copyrights))
@@ -140,7 +149,6 @@ def check(root):
         'License': 'CC-BY-4.0',
     }:
         raise ValueError('Japanese glyph attribution does not match the pinned ImGui source')
-    draw = (root / 'third_party/imgui/imgui_draw.cpp').read_text(encoding='utf-8')
     _, marker, japanese = draw.partition('ImFontAtlas::GetGlyphRangesJapanese()')
     comments, table, _ = japanese.partition('static const short')
     if not marker or not table:
@@ -181,7 +189,7 @@ def check(root):
         if copyright_notice not in text:
             raise ValueError(f'Missing bundled copyright notice: {copyright_notice}')
     print(
-        'PASS: project MIT license, seven bundled component notices, and research credits match pinned sources.'
+        'PASS: project MIT license, bundled component notices, and research credits match pinned sources.'
     )
 
 

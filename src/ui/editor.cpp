@@ -226,9 +226,8 @@ void relic_tiles(const EditorView &rt, EditorState &state, const Appearance &app
             ImGui::IsMouseHoveringRect({header_clip.x, header_clip.y},
                                        {header_clip.z, header_clip.w}))
             effect_tooltip(appearance, name);
-        draw->AddLine({position.x + appearance.space(2), position.y + appearance.space(13)},
-                      {end.x - appearance.space(2), position.y + appearance.space(13)},
-                      ImGui::GetColorU32(rgb(65, 80, 103)));
+        draw->AddLineH(position.x + appearance.space(2), end.x - appearance.space(2),
+                       position.y + appearance.space(13), ImGui::GetColorU32(rgb(65, 80, 103)));
         if (relic) {
             const auto &effects = *tile.effects;
             float y = position.y + appearance.space(15);

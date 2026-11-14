@@ -34,6 +34,7 @@ class Dx12Renderer {
     ComPtr<ID3D12Fence> fence;
     std::unique_ptr<void, CloseEvent> fence_event;
     UINT64 next_fence = 0;
+    std::vector<UINT> free_srv_descriptors;
     std::vector<Frame> frames;
     bool backend_ready = false;
 };

@@ -42,32 +42,31 @@ void Appearance::load_icons(ImFontAtlas &atlas, const GameAssets &assets) {
         if (top < bottom)
             effect_icon_y_[cell] = float(top + bottom) / (2 * IconAtlas::icon_size) - .5f;
     }
-    atlas.TexDesiredWidth = 4096;
+    atlas.TexMinWidth = 4096;
     icon_rectangle =
-        atlas.AddCustomRectRegular(static_cast<int>(icon_width), static_cast<int>(icon_height));
-    unsigned char *pixels = nullptr;
-    int width = 0, height = 0;
-    atlas.GetTexDataAsRGBA32(&pixels, &width, &height);
-    const auto *rect = atlas.GetCustomRectByIndex(icon_rectangle);
+        atlas.AddCustomRect(static_cast<int>(icon_width), static_cast<int>(icon_height));
+    ImFontAtlasRect rect;
+    atlas.GetCustomRect(icon_rectangle, &rect);
     for (unsigned int y = 0; y < icon_height; ++y)
         std::copy_n(icons.rgba.data() + std::size_t(y) * icon_width * 4, icon_width * 4,
-                    pixels + (std::size_t(rect->Y + y) * width + rect->X) * 4);
-    atlas.TexPixelsUseColors = true;
+                    static_cast<unsigned char *>(atlas.TexData->GetPixelsAt(rect.x, rect.y + y)));
+    atlas.TexPixelsUseColors = atlas.TexData->UseColors = true;
 }
 
 bool Appearance::atlas_image(unsigned int cell, ImVec2 position, float size, bool faded) const {
     if (icon_rectangle >= 0 && cell < IconAtlas::columns * (icon_height / IconAtlas::cell_size)) {
         auto &atlas = *ImGui::GetIO().Fonts;
-        const auto *rect = atlas.GetCustomRectByIndex(icon_rectangle);
+        ImFontAtlasRect rect;
+        atlas.GetCustomRect(icon_rectangle, &rect);
         const float x = static_cast<float>(
-            rect->X + (cell % IconAtlas::columns) * IconAtlas::cell_size + IconAtlas::gutter);
+            rect.x + (cell % IconAtlas::columns) * IconAtlas::cell_size + IconAtlas::gutter);
         const float y = static_cast<float>(
-            rect->Y + (cell / IconAtlas::columns) * IconAtlas::cell_size + IconAtlas::gutter);
+            rect.y + (cell / IconAtlas::columns) * IconAtlas::cell_size + IconAtlas::gutter);
         const float extent = static_cast<float>(IconAtlas::icon_size);
         ImGui::GetWindowDrawList()->AddImage(
-            atlas.TexID, position, {position.x + size, position.y + size},
-            {x / atlas.TexWidth, y / atlas.TexHeight},
-            {(x + extent) / atlas.TexWidth, (y + extent) / atlas.TexHeight},
+            atlas.TexRef, position, {position.x + size, position.y + size},
+            {x / atlas.TexData->Width, y / atlas.TexData->Height},
+            {(x + extent) / atlas.TexData->Width, (y + extent) / atlas.TexData->Height},
             IM_COL32(255, 255, 255, faded ? 178 : 255));
         return true;
     }
@@ -106,8 +105,8 @@ void Appearance::effect_icon(const CatalogPresentation &catalog, std::uint32_t i
     auto *draw = ImGui::GetWindowDrawList();
     if (id != UINT32_MAX)
         draw->AddRect(position, {position.x + size, position.y + size}, ImGui::GetColorU32(muted));
-    draw->AddLine({position.x + size * .3f, position.y + size * .5f},
-                  {position.x + size * .7f, position.y + size * .5f}, ImGui::GetColorU32(muted));
+    draw->AddLineH(position.x + size * .3f, position.x + size * .7f, position.y + size * .5f,
+                   ImGui::GetColorU32(muted));
 }
 
 void Appearance::effect_line(const CatalogPresentation &catalog, std::uint32_t id,
@@ -160,7 +159,7 @@ void Appearance::lock_icon(ImVec2 p, float size) const {
     auto *draw = ImGui::GetWindowDrawList();
     const auto color = ImGui::GetColorU32(ivory);
     draw->PathArcTo({p.x + size * .5f, p.y + size * .4f}, size * .24f, 3.14159f, 6.28318f, 12);
-    draw->PathStroke(color, 0, px(2));
+    draw->PathStroke(color, px(2));
     draw->AddRectFilled({p.x + size * .17f, p.y + size * .38f},
                         {p.x + size * .83f, p.y + size * .9f}, color, px(1));
     draw->AddCircleFilled({p.x + size * .5f, p.y + size * .61f}, size * .065f,
@@ -172,7 +171,7 @@ ImVec2 text_ink(const char *text, ImFont *font, float size, float wrap_width) {
         font = ImGui::GetFont();
     if (size <= 0)
         size = ImGui::GetFontSize();
-    const float scale = size / font->FontSize;
+    auto *baked = font->GetFontBaked(size);
     ImVec2 bounds{std::numeric_limits<float>::max(), 0};
     const char *end = text + std::strlen(text);
     const char *wrap_end = nullptr;
@@ -180,7 +179,7 @@ ImVec2 text_ink(const char *text, ImFont *font, float size, float wrap_width) {
     while (*text) {
         if (wrap_width > 0) {
             if (!wrap_end)
-                wrap_end = font->CalcWordWrapPositionA(scale, text, end, wrap_width);
+                wrap_end = font->CalcWordWrapPosition(size, text, end, wrap_width);
             if (text >= wrap_end) {
                 y += size;
                 while (ImCharIsBlankA(*text))
@@ -200,10 +199,10 @@ ImVec2 text_ink(const char *text, ImFont *font, float size, float wrap_width) {
         }
         if (character == '\r')
             continue;
-        const auto *glyph = font->FindGlyph(static_cast<ImWchar>(character));
+        const auto *glyph = baked->FindGlyph(static_cast<ImWchar>(character));
         if (glyph && glyph->Visible) {
-            bounds.x = std::min(bounds.x, y + glyph->Y0 * scale);
-            bounds.y = std::max(bounds.y, y + glyph->Y1 * scale);
+            bounds.x = std::min(bounds.x, y + glyph->Y0);
+            bounds.y = std::max(bounds.y, y + glyph->Y1);
         }
     }
     return bounds.y > bounds.x ? bounds : ImVec2{0, size};
@@ -250,8 +249,7 @@ void centered_text(const char *text, UiRect bounds, ImFont *font, float size, Im
     const char *end = text + std::strlen(text);
     for (const char *line = text; line < end;) {
         const auto *paragraph = std::find(line, end, '\n');
-        const char *next =
-            font->CalcWordWrapPositionA(size / font->FontSize, line, paragraph, bounds.width);
+        const char *next = font->CalcWordWrapPosition(size, line, paragraph, bounds.width);
         if (next == line && line != paragraph) {
             unsigned int character = 0;
             next += ImTextCharFromUtf8(&character, line, paragraph);
@@ -277,7 +275,7 @@ void centered_text(const char *text, UiRect bounds, ImFont *font, float size, Im
 
 ImVec2 Appearance::badge_size(const char *text) const {
     auto *font = tag_font ? tag_font : ImGui::GetFont();
-    const float size = font->FontSize;
+    const float size = font->LegacySize;
     const auto width = font->CalcTextSizeA(size, FLT_MAX, 0, text).x;
     const int columns = static_cast<int>(std::ceil(width / (4 * scale)));
     return {space(columns + 4), space(6)};
@@ -292,7 +290,7 @@ bool Appearance::badge(const char *text, ImVec2 position, ImVec4 color) const {
     draw->AddRect(position, end, ImGui::GetColorU32({color.x, color.y, color.z, .35f}), space(1));
     auto *font = tag_font ? tag_font : ImGui::GetFont();
     // Optical adjustment is independent of the spacing grid.
-    centered_text(text, {position.x, position.y + px(1), size.x, size.y}, font, font->FontSize,
+    centered_text(text, {position.x, position.y + px(1), size.x, size.y}, font, font->LegacySize,
                   color);
     return ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(position, end);
 }
@@ -364,7 +362,7 @@ NoticeAction notification(Notice &message, const Appearance &appearance, UiRect 
                              (dismiss_width ? dismiss_width + gap : 0);
     auto *body_font =
         !message.title.empty() && appearance.tag_font ? appearance.tag_font : ImGui::GetFont();
-    const float body_size = body_font->FontSize;
+    const float body_size = body_font->LegacySize;
     const auto body_ink = text_ink(message.text.c_str(), body_font, body_size, text_width);
     const auto title = elide_text(message.title.c_str(), text_width);
     const auto title_ink = text_ink(title.c_str());
@@ -384,9 +382,10 @@ NoticeAction notification(Notice &message, const Appearance &appearance, UiRect 
         ImGui::LogRenderedText(&text, message.text.c_str());
     NoticeAction result = NoticeAction::None;
     const float button_height = appearance.space(8);
-    ImGui::SetCursorPos({bounds.width - padding - action_width - dismiss_width -
-                             (action_width && dismiss_width ? gap : 0),
-                         std::round((height - button_height) / 2)});
+    if (action_width || dismiss_width)
+        ImGui::SetCursorPos({bounds.width - padding - action_width - dismiss_width -
+                                 (action_width && dismiss_width ? gap : 0),
+                             std::round((height - button_height) / 2)});
     if (action_width) {
         const auto label =
             std::string(message.action == NoticeAction::ReloadSlot ? "Reload slot "

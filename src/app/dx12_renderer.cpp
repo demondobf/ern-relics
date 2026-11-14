@@ -34,9 +34,12 @@ Dx12Renderer::Dx12Renderer(IDXGISwapChain *chain, ID3D12CommandQueue *captured_q
     heap.NumDescriptors = desc.BufferCount;
     check(r.device->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&r.rtv_heap)), "Create RTV heap");
     heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    heap.NumDescriptors = 1;
+    // Atlas growth keeps old and new textures alive until queued frames retire.
+    heap.NumDescriptors = 64;
     heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     check(r.device->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&r.srv_heap)), "Create SRV heap");
+    for (UINT i = heap.NumDescriptors; i > 0; --i)
+        r.free_srv_descriptors.push_back(i - 1);
     r.frames.resize(desc.BufferCount);
     auto rtv = r.rtv_heap->GetCPUDescriptorHandleForHeapStart();
     const auto stride = r.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -77,11 +80,25 @@ Dx12Renderer::Dx12Renderer(IDXGISwapChain *chain, ID3D12CommandQueue *captured_q
     init.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo *info, D3D12_CPU_DESCRIPTOR_HANDLE *cpu,
                                    D3D12_GPU_DESCRIPTOR_HANDLE *gpu) {
         auto *state = static_cast<Dx12Renderer *>(info->UserData);
+        if (state->free_srv_descriptors.empty())
+            throw std::runtime_error("Overlay texture descriptor heap exhausted");
+        const auto index = state->free_srv_descriptors.back();
+        state->free_srv_descriptors.pop_back();
+        const auto stride =
+            state->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         *cpu = state->srv_heap->GetCPUDescriptorHandleForHeapStart();
         *gpu = state->srv_heap->GetGPUDescriptorHandleForHeapStart();
+        cpu->ptr += static_cast<SIZE_T>(index) * stride;
+        gpu->ptr += static_cast<UINT64>(index) * stride;
     };
-    init.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo *, D3D12_CPU_DESCRIPTOR_HANDLE,
-                                  D3D12_GPU_DESCRIPTOR_HANDLE) {};
+    init.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo *info, D3D12_CPU_DESCRIPTOR_HANDLE cpu,
+                                  D3D12_GPU_DESCRIPTOR_HANDLE) {
+        auto *state = static_cast<Dx12Renderer *>(info->UserData);
+        const auto start = state->srv_heap->GetCPUDescriptorHandleForHeapStart();
+        const auto stride =
+            state->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        state->free_srv_descriptors.push_back(static_cast<UINT>((cpu.ptr - start.ptr) / stride));
+    };
     if (!ImGui_ImplDX12_Init(&init))
         throw std::runtime_error("ImGui DX12 initialization failed");
     r.backend_ready = true;

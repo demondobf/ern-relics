@@ -52,6 +52,9 @@ in a later view. Rendering does not access game memory or files.
 [overlay](../src/app/overlay.cpp) manages graphics hooks and window input, with
 renderer and ImGui state shared under one mutex. The DLL and its hooks remain
 loaded until process exit. Graphics resources follow the swap chain's lifetime.
+Icons share ImGui's font atlas. Their rectangles and texture references are read
+when drawing because loading glyphs can resize the atlas. The renderer allocates
+separate SRV descriptors for old and new textures until ImGui retires them.
 
 ## Relic editing
 

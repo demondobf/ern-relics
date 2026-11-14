@@ -11,6 +11,7 @@ from tools.checks.notices import (
     JAPANESE_GLYPH_CREDITS,
     SEPARATOR,
     check,
+    mit_parts,
     sections,
 )
 
@@ -72,12 +73,7 @@ def main():
             notice, original.replace('THIS SOFTWARE IS PROVIDED', 'THIS SOFTWARE WAS PROVIDED', 1)
         )
         reject(notice, original.replace('SOFTWARE.\n', 'SOFTWARE.\nRedundant terms.\n', 1))
-        for copyright_notice in (
-            'Copyright (c) 2014-2025 Omar Cornut',
-            'Copyright (c) 2004, 2005 Tristan Grimmer',
-            'Copyright (c) 2017 Sean Barrett',
-            'Copyright (c) 2022 Sergii Kudlai',
-        ):
+        for copyright_notice in mit_parts(sections(original)['mit'][1])[0]:
             reject(notice, original.replace(copyright_notice, ''))
         reject(
             notice,
@@ -102,7 +98,9 @@ def main():
         reject(
             notice,
             original.replace(
-                'Revision: f5befd2d29e66809cd1110a152e375a7f1981f06', 'Revision: ' + '0' * 40, 1
+                'Revision: ' + json.loads(original_pins)[0]['Commit'],
+                'Revision: ' + '0' * 40,
+                1,
             ),
         )
         reject(notice, original.replace('c63eae720c00ffa48abad9b77906d0ed4a9f81e7', '0' * 40))

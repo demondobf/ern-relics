@@ -2,7 +2,7 @@
   {
     "Name": "imgui",
     "Url": "https://github.com/ocornut/imgui.git",
-    "Commit": "f5befd2d29e66809cd1110a152e375a7f1981f06"
+    "Commit": "c1aaac65e896a45f81f47a4d68f9959e0f86c859"
   },
   {
     "Name": "minhook",

@@ -26,15 +26,18 @@ https://github.com/mrtanger14-debug/RConnectMod/blob/fe5aac62cc69f40ed5e1e8ee81f
 
 MIT components
 Component: mit
-imgui: https://github.com/ocornut/imgui.git (f5befd2d29e66809cd1110a152e375a7f1981f06)
+imgui: https://github.com/ocornut/imgui.git (c1aaac65e896a45f81f47a4d68f9959e0f86c859)
 proggyclean: ImGui's embedded font
+proggyforever: ImGui's embedded font, https://github.com/ocornut/proggyforever
 stb: ImGui's imstb_rectpack.h, imstb_textedit.h, imstb_truetype.h
 bcdec: https://github.com/iOrange/bcdec.git (80859ed3b7afb1c527a2a99d70c61457bea72d0c)
 License: MIT
 License text:
 
-Copyright (c) 2014-2025 Omar Cornut
+Copyright (c) 2014-2026 Omar Cornut
 Copyright (c) 2004, 2005 Tristan Grimmer
+Copyright (c) 2026 Disco Hello
+Copyright (c) 2019,2023 Tristan Grimmer
 Copyright (c) 2017 Sean Barrett
 Copyright (c) 2022 Sergii Kudlai
 
@@ -59,8 +62,8 @@ SOFTWARE.
 
 Japanese glyph-range data in Dear ImGui
 Component: imgui-japanese
-Source: https://github.com/ocornut/imgui/blob/f5befd2d29e66809cd1110a152e375a7f1981f06/imgui_draw.cpp
-Revision: f5befd2d29e66809cd1110a152e375a7f1981f06
+Source: https://github.com/ocornut/imgui/blob/c1aaac65e896a45f81f47a4d68f9959e0f86c859/imgui_draw.cpp
+Revision: c1aaac65e896a45f81f47a4d68f9959e0f86c859
 License: CC-BY-4.0
 Attribution:
 

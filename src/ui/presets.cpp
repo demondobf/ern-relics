@@ -68,19 +68,25 @@ void preset_slot(const EditorView &rt, const Appearance &appearance, std::size_t
     }
     ImGui::SetCursorScreenPos({position.x, position.y + art + appearance.space(2)});
     ImGui::Separator();
-    ImGui::SetCursorScreenPos({position.x, position.y + art + appearance.space(4)});
+    const ImVec2 effects_position{position.x, position.y + art + appearance.space(4)};
     if (preset.slots[index]) {
         const auto &effects = *preset.slots[index];
+        bool first = true;
         for (std::size_t effect = 0; effect < effects_per_relic; ++effect) {
             if (effects.rows[effect].effect == UINT32_MAX)
                 continue;
+            if (first)
+                ImGui::SetCursorScreenPos(effects_position);
+            else
+                vertical_gap(appearance.space(2));
+            first = false;
             appearance.effect_pair(rt.presentation(), effects.rows[effect].effect,
                                    effects.rows[effect].curse, deep, false);
-            if (effect + 1 < effects_per_relic)
-                vertical_gap(appearance.space(2));
         }
-    } else
+    } else {
+        ImGui::SetCursorScreenPos(effects_position);
         ImGui::TextColored(muted, "Slot omitted");
+    }
     ImGui::PopFont();
     ImGui::EndChild();
     ImGui::PopStyleColor();

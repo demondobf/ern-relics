@@ -82,15 +82,21 @@ ern::EditorView fixture(bool deep, bool wrapped) {
 }
 
 struct Frame {
-    explicit Frame(float height, const ern::EditorView &view) {
+    explicit Frame(float height, const ern::EditorView &view, bool dynamic_textures = false) {
         ImGui::CreateContext();
+        // Release builds recover from ImGui errors; tests must reject them too.
+        ImGui::GetCurrentContext()->ErrorCallback =
+            [](ImGuiContext *, void *, const char *message) { throw std::runtime_error(message); };
+        if (dynamic_textures)
+            ImGui::GetIO().BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
         appearance.initialize(view.assets(), *view.fonts, height);
         auto &io = ImGui::GetIO();
         io.DisplaySize = {height * 16 / 9, height};
         io.DeltaTime = 1.f / 60;
         unsigned char *pixels = nullptr;
         int width = 0, atlas_height = 0;
-        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &atlas_height);
+        if (!dynamic_textures)
+            io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &atlas_height);
     }
     ~Frame() { ImGui::DestroyContext(); }
     Frame(const Frame &) = delete;
@@ -235,14 +241,14 @@ void button_alignment(float height) {
                     const auto &v = draw->VtxBuffer[i];
                     if (v.col == color) {
                         if (origin == FLT_MAX)
-                            origin = v.pos.y - ImGui::GetFont()->FindGlyph(*label)->Y0;
+                            origin = v.pos.y - ImGui::GetFontBaked()->FindGlyph(*label)->Y0;
                         top = std::min(top, v.pos.y);
                         bottom = std::max(bottom, v.pos.y);
                         left = std::min(left, v.pos.x);
                         right = std::max(right, v.pos.x);
                     }
                 }
-                const float rendered_baseline = origin + ImGui::GetFont()->Ascent;
+                const float rendered_baseline = origin + ImGui::GetFontBaked()->Ascent;
                 if (baseline == FLT_MAX)
                     baseline = rendered_baseline;
                 std::cout << "height=" << height << " button=" << label
@@ -274,7 +280,8 @@ void checkbox_alignment(float height) {
         const auto origin = [&](int first, char character) {
             for (int i = first; i < draw->VtxBuffer.Size; ++i)
                 if (draw->VtxBuffer[i].col == color)
-                    return draw->VtxBuffer[i].pos.y - ImGui::GetFont()->FindGlyph(character)->Y0;
+                    return draw->VtxBuffer[i].pos.y -
+                           ImGui::GetFontBaked()->FindGlyph(character)->Y0;
             throw std::runtime_error("The control label was not rendered");
         };
         auto first = draw->VtxBuffer.Size;
@@ -386,6 +393,16 @@ void preset_padding(float height) {
     render();
     require(banner.Active && banner.Pos.y == banner_y && body.Size.y == body_height,
             "The preset read-only notice did not use the common footer position");
+    for (std::size_t count = 0; count < ern::effects_per_relic; ++count) {
+        auto partial = preset;
+        for (auto &slot : partial.slots)
+            if (slot)
+                for (std::size_t row = count; row < ern::effects_per_relic; ++row)
+                    slot->rows[row] = ern::EffectRow{};
+        view.presets = std::make_shared<const std::vector<ern::SavedPreset>>(
+            std::vector<ern::SavedPreset>{{"Fixture preset", partial}});
+        render();
+    }
 }
 
 void preset_replacement(float height) {
@@ -464,6 +481,62 @@ void glyph_bounds(float height) {
                 "Text measurement differs from the rendered glyph bounds");
     }
     Frame::end();
+}
+
+void menu_transition(float height) {
+    const auto loaded = fixture(false, false);
+    auto view = loaded;
+    view.hotkey_name = "F8";
+    view.session.value = 1;
+    view.location = ern::EditLocation::NotLoaded;
+    view.lock_reason = ern::location_lock_reason(view.location);
+    view.inspection = ern::InspectionMessage{"Load a character to use the relic editor."};
+    view.drafts = {};
+    view.review = {};
+    const auto menu = view;
+    Frame frame(height, view);
+    ern::EditorUi ui;
+    ui.initialize(view, height);
+    unsigned char *pixels = nullptr;
+    int width = 0, atlas_height = 0;
+    ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&pixels, &width, &atlas_height);
+    std::optional<ern::EditorAction> action;
+    bool open = true;
+    const auto draw = [&] {
+        std::string text;
+        for (int i = 0; i < 3; ++i) {
+            ImGui::NewFrame();
+            ImGui::LogToBuffer();
+            ui.draw(view, false, action, open);
+            text = ImGui::GetCurrentContext()->LogBuffer.c_str();
+            ImGui::LogFinish();
+            ImGui::Render();
+        }
+        require(!action && open, "Rendering the menu transition changed editor state");
+        return text;
+    };
+    const auto check_menu = [&] {
+        const auto text = draw();
+        require(text.find("Character not loaded") != std::string::npos &&
+                    text.find("Load a character to use the relic editor.") != std::string::npos,
+                "The title menu did not explain how to open the relic editor");
+        require(child("##notification").Active,
+                "The title menu did not retain the editing lock notice");
+        for (const auto *window : ImGui::GetCurrentContext()->Windows)
+            require(!window->Active || (!std::strstr(window->Name, "/relic-grid_") &&
+                                        !std::strstr(window->Name, "/effect-browser_")),
+                    "Unloading a character left relic controls visible");
+    };
+    check_menu();
+    view = loaded;
+    view.session.value = 2;
+    view.location = ern::EditLocation::RoundtableHold;
+    draw();
+    require(child("/effect-browser_").Active && !child("##notification").Active,
+            "Loading a character in Roundtable did not restore the editor");
+    view = menu;
+    view.session.value = 3;
+    check_menu();
 }
 
 void read_only_and_pending(float height) {
@@ -635,9 +708,9 @@ void diagnostics_above_notifications(float height) {
 
 int check_icon_alignment(const ern::GameAssets &assets) {
     const auto &atlas = *ImGui::GetIO().Fonts;
-    const ImFontAtlasCustomRect *icons = nullptr;
-    for (const auto &rect : atlas.CustomRects)
-        if (rect.Width == assets.atlas.width && rect.Height == assets.atlas.height)
+    const ImTextureRect *icons = nullptr;
+    for (const auto &rect : atlas.Builder->Rects)
+        if (rect.w == assets.atlas.width && rect.h == assets.atlas.height)
             icons = &rect;
     require(icons, "The test icon atlas was not uploaded to ImGui");
     const auto ivory = ImGui::ColorConvertFloat4ToU32(ern::ui::ivory);
@@ -650,10 +723,10 @@ int check_icon_alignment(const ern::GameAssets &assets) {
         const auto &vertices = window->DrawList->VtxBuffer;
         for (unsigned int cell = 0; cell < 5; ++cell) {
             const float u =
-                float(icons->X + cell * ern::IconAtlas::cell_size + ern::IconAtlas::gutter) /
-                atlas.TexWidth;
-            const float v = float(icons->Y + ern::IconAtlas::gutter) / atlas.TexHeight;
-            const float u_end = u + float(ern::IconAtlas::icon_size) / atlas.TexWidth;
+                float(icons->x + cell * ern::IconAtlas::cell_size + ern::IconAtlas::gutter) /
+                atlas.TexData->Width;
+            const float v = float(icons->y + ern::IconAtlas::gutter) / atlas.TexData->Height;
+            const float u_end = u + float(ern::IconAtlas::icon_size) / atlas.TexData->Width;
             for (int index = 0; index + 4 < vertices.Size; ++index) {
                 if (std::abs(vertices[index].uv.x - u) > .00001f ||
                     std::abs(vertices[index].uv.y - v) > .00001f ||
@@ -1060,11 +1133,43 @@ void badge_alignment(float height) {
             "The shared badge label sits too high or has excessive optical offset");
 }
 
+void atlas_growth() {
+    const auto view = fixture(false, false);
+    Frame frame(1080.f, view, true);
+    frame.begin();
+    auto &atlas = *ImGui::GetIO().Fonts;
+    auto *draw = ImGui::GetWindowDrawList();
+    auto *old_texture = atlas.TexData;
+    frame.appearance.effect_icon(view.presentation(), 7000400, {20, 20}, 32);
+    const auto old_command = draw->CmdBuffer.Size - 1;
+    require(atlas.AddCustomRect(old_texture->Width, old_texture->Height) >= 0,
+            "The atlas growth fixture could not reserve a rectangle");
+    require(atlas.TexData != old_texture, "The atlas growth fixture did not resize the texture");
+    const auto first = draw->VtxBuffer.Size;
+    frame.appearance.effect_icon(view.presentation(), 7000400, {60, 20}, 32);
+    require(draw->CmdBuffer[old_command].TexRef._TexData == old_texture &&
+                draw->CmdBuffer.back().TexRef._TexData == atlas.TexData,
+            "Icons did not retain the texture reference matching their UV coordinates");
+    require(atlas.TexData->UseColors, "Atlas growth lost the colored icon format");
+    const auto uv = draw->VtxBuffer[first].uv;
+    const int x = static_cast<int>(std::round(uv.x * atlas.TexData->Width));
+    const int y = static_cast<int>(std::round(uv.y * atlas.TexData->Height));
+    const auto &source = view.assets().atlas;
+    for (unsigned int row = 0; row < ern::IconAtlas::icon_size; ++row)
+        require(std::memcmp(atlas.TexData->GetPixelsAt(x, y + row),
+                            source.rgba.data() + ((row + ern::IconAtlas::gutter) * source.width +
+                                                  ern::IconAtlas::gutter) *
+                                                     4,
+                            ern::IconAtlas::icon_size * 4) == 0,
+                "Atlas growth changed icon pixels");
+    Frame::end();
+}
+
 void native_text_pixels(float height) {
     auto view = fixture(false, false);
     Frame frame(height, view);
     frame.begin();
-    require(ImGui::GetFontSize() == ImGui::GetIO().FontDefault->FontSize,
+    require(ImGui::GetFontSize() == ImGui::GetIO().FontDefault->LegacySize,
             "The UI magnified its baked body font");
     auto *draw = ImGui::GetWindowDrawList();
     const int first = draw->VtxBuffer.Size;
@@ -1074,7 +1179,7 @@ void native_text_pixels(float height) {
         ImGui::PushFont(font);
         draw->AddText({std::round(position.x), std::round(position.y)}, IM_COL32_WHITE,
                       "Relic changes +1");
-        position.y += font->FontSize + frame.appearance.space(2);
+        position.y += font->LegacySize + frame.appearance.space(2);
         ImGui::PopFont();
     }
     const int end = draw->VtxBuffer.Size;
@@ -1084,11 +1189,11 @@ void native_text_pixels(float height) {
     for (int i = first; i + 3 < end; i += 4) {
         const auto &top = draw->VtxBuffer[i];
         const auto &bottom = draw->VtxBuffer[i + 2];
-        require(
-            std::abs(bottom.pos.x - top.pos.x - (bottom.uv.x - top.uv.x) * atlas.TexWidth) < .01f &&
-                std::abs(bottom.pos.y - top.pos.y - (bottom.uv.y - top.uv.y) * atlas.TexHeight) <
-                    .01f,
-            "Font bitmap pixels were stretched or shrunk on screen");
+        require(std::abs(bottom.pos.x - top.pos.x -
+                         (bottom.uv.x - top.uv.x) * atlas.TexData->Width) < .01f &&
+                    std::abs(bottom.pos.y - top.pos.y -
+                             (bottom.uv.y - top.uv.y) * atlas.TexData->Height) < .01f,
+                "Font bitmap pixels were stretched or shrunk on screen");
         for (int corner = 0; corner < 4; ++corner) {
             const auto p = draw->VtxBuffer[i + corner].pos;
             require(std::abs(p.x - std::round(p.x)) < .01f &&
@@ -1128,7 +1233,8 @@ void pair_grouping(float height) {
     for (std::size_t i = 0; i < 2; ++i) {
         frame.appearance.effect_pair(view.presentation(), view.drafts[3]->effects.rows[i].effect,
                                      UINT32_MAX, true, false);
-        ern::ui::vertical_gap(frame.appearance.space(2));
+        if (i == 0)
+            ern::ui::vertical_gap(frame.appearance.space(2));
     }
     ImGui::PopFont();
     Frame::end();
@@ -1163,8 +1269,7 @@ void popup_scale(float height) {
                               &std::get<ern::EquippedRelics>(view.inspection), 0,
                               ern::editor_bounds(ImGui::GetIO().DisplaySize.x, height));
     Frame::end();
-    require(std::abs(child("##Popup_").CalcFontSize() - ImGui::GetIO().FontDefault->FontSize) <
-                .01f,
+    require(std::abs(child("##Popup_").FontRefSize - ImGui::GetIO().FontDefault->LegacySize) < .01f,
             "The diagnostics popup applied display scaling twice");
 }
 
@@ -1249,6 +1354,7 @@ void change_alignment(float height) {
 int main() {
     return test::run(
         "rendered icon alignment, compact layout, tooltips and validation across five scales", [] {
+            atlas_growth();
             for (const float height : {720.f, 900.f, 1080.f, 1440.f, 2160.f}) {
                 for (const bool deep : {false, true})
                     for (const bool wrapped : {false, true}) {
@@ -1260,6 +1366,7 @@ int main() {
                 preset_padding(height);
                 preset_replacement(height);
                 glyph_bounds(height);
+                menu_transition(height);
                 read_only_and_pending(height);
                 locked_relic_grid(height);
                 diagnostics_above_notifications(height);

@@ -35,6 +35,7 @@ implicitly. Doctor can run before setup to report missing prerequisites.
 Each command has one job:
 
 - `uv sync --locked` prepares managed Python and locked Python packages in `.venv/`.
+  The Python patch version is pinned in `.python-version` for local builds and CI.
 - [LLVM setup](../tools/setup/llvm.py) installs pinned clang-tidy and builtin
   headers under `.tools/llvm/<version>/`. It checks the archive checksum and
   reuses a matching installation. It needs 7-Zip, with no administrator access

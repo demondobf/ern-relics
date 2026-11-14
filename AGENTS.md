@@ -2,7 +2,8 @@
 
 See the [development guide](docs/development.md) for setup and verification.
 
-- Run `./tools/check.ps1 -Label dev` for code changes.
+- Activate `./tools/setup/shell.ps1`, then run
+  `uv run --no-sync python -m tools.check` for code changes.
 - For documentation-only changes, run `uv run --locked python -m tools.checks.layout`.
 - Reuse `dist/ern-relics-<version>-dev/` for development builds. Preserve versioned
   release packages and ZIPs in `dist/`.

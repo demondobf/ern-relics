@@ -1,0 +1,98 @@
+#requires -Version 7.4
+# Shared, read-only dependency checks for setup scripts, doctor, and builds.
+function Test-WindowsEnvironment {
+    if (-not $IsWindows -or -not [Environment]::Is64BitOperatingSystem) { throw 'Use 64-bit Windows.' }
+    return "64-bit Windows; PowerShell $($PSVersionTable.PSVersion)"
+}
+
+function Get-GitVersion {
+    $version = & git --version
+    if ($LASTEXITCODE -ne 0) { throw 'Install Git and reopen the terminal.' }
+    return $version
+}
+
+function Get-UvVersion {
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        $installed = Join-Path $env:USERPROFILE '.local/bin/uv.exe'
+        if (Test-Path -LiteralPath $installed) { throw "Installed at $installed but absent from this process PATH. Restart the terminal or its parent app." }
+        throw 'Install uv and reopen the terminal.'
+    }
+    $project = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '../../pyproject.toml')
+    if ($project -notmatch 'required-version = ">=(\d+\.\d+\.\d+)"') { throw 'Cannot read the uv minimum version.' }
+    $minimum = [version]$Matches[1]
+    $version = & uv --version
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '^uv (\d+\.\d+\.\d+)' -or [version]$Matches[1] -lt $minimum) {
+        throw "uv $minimum or newer required; found $version"
+    }
+    return $version
+}
+
+function Get-NativeToolchain {
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+    if (-not (Test-Path -LiteralPath $vswhere)) { throw 'Install Visual Studio C++ Build Tools and the Windows SDK.' }
+    # Shell activation needs the core tools together. CMake validates ASan only
+    # when its preset is selected; doctor reports that capability separately.
+    $config = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '../../.vsconfig') | ConvertFrom-Json
+    $pinned = @($config.components | Where-Object { $_ -match '^Microsoft\.VisualStudio\.Component\.VC\.14\.\d+\.x86\.x64$' })
+    if ($pinned.Count -ne 1) { throw '.vsconfig must select one versioned MSVC x64/x86 component.' }
+    $toolset = ($pinned[0] -split '\.')[4..5] -join '.'
+    # A runner's default toolset may have only the generic component registered.
+    # Require the core components together, then inspect installed toolset files.
+    $components = $config.components | Where-Object {
+        $_ -notlike 'Microsoft.VisualStudio.Workload.*' -and
+        $_ -ne 'Microsoft.VisualStudio.Component.VC.ASAN' -and $_ -ne $pinned[0]
+    }
+    $installations = & $vswhere -sort -products '*' -version '[18.6,19.0)' -requires $components -property installationPath
+    if ($LASTEXITCODE -ne 0) { throw 'Visual Studio discovery failed.' }
+    $installation = $null
+    $selected = $null
+    foreach ($candidate in $installations) {
+        $directory = Join-Path $candidate 'VC/Tools/MSVC'
+        if (-not (Test-Path -LiteralPath $directory)) { continue }
+        $selected = Get-ChildItem -LiteralPath $directory -Directory |
+            Where-Object { $_.Name -match "^$([regex]::Escape($toolset))\.\d+$" } |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+        if ($selected) { $installation = $candidate; break }
+    }
+    if (-not $installation) {
+        $labels = @{
+            'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' = 'MSVC C++ tools'
+            'Microsoft.VisualStudio.Component.VC.CMake.Project' = 'CMake and Ninja'
+            'Microsoft.VisualStudio.Component.Windows11SDK.26100' = 'Windows SDK 10.0.26100'
+        }
+        $required = $components | ForEach-Object { if ($labels.ContainsKey($_)) { $labels[$_] } else { $_ } }
+        throw "Visual Studio 2026 must include all required components in one installation: $($required -join ', '), MSVC toolset $toolset. Import .vsconfig into Visual Studio Installer."
+    }
+    $compiler = Join-Path $selected.FullName 'bin/Hostx64/x64/cl.exe'
+    $compilerVersion = (Get-Item -LiteralPath $compiler).VersionInfo.FileVersion
+    $expected = $toolset -replace '^14\.', '19.'
+    if ($compilerVersion -notlike "$expected.*") { throw "MSVC $expected required; found $compilerVersion" }
+    $cmake = Join-Path $installation 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe'
+    if (-not (Test-Path -LiteralPath $cmake)) { throw 'Visual Studio CMake is missing. Import .vsconfig into Visual Studio Installer.' }
+    $ninja = Join-Path $installation 'Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe'
+    if (-not (Test-Path -LiteralPath $ninja)) { throw 'Visual Studio Ninja is missing. Import .vsconfig into Visual Studio Installer.' }
+    $cmakeVersion = & $cmake --version
+    if ($LASTEXITCODE -ne 0 -or ($cmakeVersion -join "`n") -notmatch 'cmake version (\d+\.\d+\.\d+)' -or [version]$Matches[1] -lt [version]'3.25.0') {
+        throw "Install CMake 3.25 or newer. Found: $cmakeVersion"
+    }
+    $ninjaVersion = & $ninja --version
+    if ($LASTEXITCODE -ne 0 -or $ninjaVersion -notmatch '^(\d+\.\d+\.\d+)' -or [version]$Matches[1] -lt [version]'1.11.0') {
+        throw "Install Ninja 1.11 or newer. Found: $ninjaVersion"
+    }
+    [pscustomobject]@{
+        Installation = $installation
+        CMake = $cmake
+        Ninja = $ninja
+        CompilerVersion = $compilerVersion
+        Compiler = $compiler
+        ToolsetVersion = $selected.Name
+    }
+}
+
+function Get-ASanRuntime($Toolchain = (Get-NativeToolchain)) {
+    $runtime = Join-Path (Split-Path -Parent $Toolchain.Compiler) 'clang_rt.asan_dynamic-x86_64.dll'
+    if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) {
+        throw 'AddressSanitizer is missing from the selected compiler. Add the C++ AddressSanitizer component in Visual Studio Installer to use the asan preset.'
+    }
+    return $runtime
+}

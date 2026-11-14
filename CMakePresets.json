@@ -1,11 +1,12 @@
 {
-  "version": 5,
+  "version": 6,
   "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
   "configurePresets": [
     {
       "name": "windows",
       "hidden": true,
       "generator": "Ninja",
+      "binaryDir": "${sourceDir}/.build/${presetName}",
       "architecture": { "value": "x64", "strategy": "external" },
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
       "cacheVariables": {
@@ -41,6 +42,48 @@
         "CMAKE_TRY_COMPILE_CONFIGURATION": "RelWithDebInfo",
         "ERN_ENABLE_ASAN": true
       }
+    }
+  ],
+  "buildPresets": [
+    { "name": "release", "configurePreset": "release" },
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "asan", "configurePreset": "asan" }
+  ],
+  "testPresets": [
+    {
+      "name": "windows",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "release", "inherits": "windows", "configurePreset": "release" },
+    { "name": "debug", "inherits": "windows", "configurePreset": "debug" },
+    { "name": "asan", "inherits": "windows", "configurePreset": "asan" }
+  ],
+  "workflowPresets": [
+    {
+      "name": "release",
+      "steps": [
+        { "type": "configure", "name": "release" },
+        { "type": "build", "name": "release" },
+        { "type": "test", "name": "release" }
+      ]
+    },
+    {
+      "name": "debug",
+      "steps": [
+        { "type": "configure", "name": "debug" },
+        { "type": "build", "name": "debug" },
+        { "type": "test", "name": "debug" }
+      ]
+    },
+    {
+      "name": "asan",
+      "steps": [
+        { "type": "configure", "name": "asan" },
+        { "type": "build", "name": "asan" },
+        { "type": "test", "name": "asan" }
+      ]
     }
   ]
 }

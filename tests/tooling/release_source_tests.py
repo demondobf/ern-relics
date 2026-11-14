@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
-from tools.ci.release_source import PACKAGE_FILES, PREDICATE_TYPE, build_record, verify_record
+from tools.release.source import PACKAGE_FILES, PREDICATE_TYPE, build_record, verify_record
 
 
 class ReleaseSourceTests(unittest.TestCase):
@@ -74,8 +74,20 @@ class ReleaseSourceTests(unittest.TestCase):
             tooling_commit=self.tooling_commit,
             artifacts=self.artifacts,
             run='https://github.com/owner/repository/actions/runs/123',
+            package_directory=self.package,
         )
         return build_record(**(arguments | changes))
+
+    def test_explicit_private_candidate_is_used_instead_of_development_output(self):
+        previous = self.package
+        self.package = self.root / 'private candidate'
+        previous.rename(self.package)
+        previous.mkdir()
+        (previous / 'ern-relics.dll').write_bytes(b'unrelated development build')
+        self.record()
+        (self.package / 'ern-relics.dll').write_bytes(b'changed checked candidate')
+        with self.assertRaisesRegex(ValueError, 'differs from the checked production package'):
+            self.record()
 
     def test_clean_tagged_package_and_signed_claim(self):
         record = self.record()

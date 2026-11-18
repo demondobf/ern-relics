@@ -90,6 +90,7 @@ def check_cpp_boundaries(root):
         for directory in ('src', 'tests')
         for path in (root / directory).rglob('*.hpp')
     }
+    project_directories = {header.partition('/')[0] for header in headers.values()}
     allowed = {
         'relics': {'relics'},
         'game': {'game', 'relics'},
@@ -114,9 +115,10 @@ def check_cpp_boundaries(root):
             for delimiter, include in re.findall(
                 r'^[ \t]*#[ \t]*include[ \t]*([<"])([^>"\n]+)[>"]', contents, re.M
             ):
-                expected = headers.get(Path(include).name)
-                if delimiter == '<' and expected is None:
+                include_directory = include.replace('\\', '/').partition('/')[0].lower()
+                if delimiter == '<' and include_directory not in project_directories:
                     continue
+                expected = headers.get(Path(include).name)
                 if expected is not None and include != expected:
                     raise ValueError(f'{relative}: use "{expected}", found "{include}"')
                 if expected is None and include not in ('bcdec.h', 'game_keys.hpp'):

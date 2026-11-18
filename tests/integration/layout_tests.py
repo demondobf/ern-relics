@@ -45,7 +45,7 @@ target_link_libraries(ern_relics PRIVATE ern_runtime)
             'src/ui/view.hpp': '',
             'src/app/runtime.hpp': '',
             'src/app/editor_view.hpp': '',
-            'src/app/controller.cpp': '#include "data/source.hpp"',
+            'src/app/controller.cpp': '#include "data/source.hpp"\n#include <vendor/view.hpp>',
             'src/native/bootstrap.cpp': '#include "app/runtime.hpp"\n#include "ui/view.hpp"',
             'src/native/bootstrap.hpp': '',
             'tests/support/fixture.hpp': '',
@@ -66,6 +66,7 @@ target_link_libraries(ern_relics PRIVATE ern_runtime)
             ('src/ui/view.cpp', '#include <fstream>'),
             ('src/ui/view.cpp', 'atlas.AddFontFromFileTTF("font.ttf", 18);'),
             ('src/app/controller.cpp', '#include "native/bootstrap.hpp"'),
+            ('src/app/controller.cpp', '#include <native/missing.hpp>'),
             ('src/app/runtime.hpp', '#include <ui/view.hpp>'),
             ('src/native/bootstrap.hpp', '#include "support/fixture.hpp"'),
             (

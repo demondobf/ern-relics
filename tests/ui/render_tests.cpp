@@ -640,13 +640,16 @@ void stopped_worker(float height, bool presets) {
         return draw();
     };
     const auto check_popup = [&](const std::string &text) {
-        require(child("##Popup_").Active && text.find(view.version) != std::string::npos &&
-                    text.find("Injected polling failure") != std::string::npos,
+        require(child("##Popup_").Active &&
+                    text.find("| Game | " + view.version + " |") != std::string::npos &&
+                    text.find("| Editing | " + view.application_error + " |") != std::string::npos,
                 "Diagnostics did not show the last published session and the worker error");
         activate("##Popup_", "Refresh");
         require(!action && child("##Popup_").Active, "A stopped editor refreshed Diagnostics");
-        activate("##Popup_", "Close");
-        require(!child("##Popup_").Active, "A stopped editor could not close Diagnostics");
+        const auto closed = activate("##Popup_", "Close");
+        require(!child("##Popup_").Active &&
+                    closed.find(view.application_error) != std::string::npos,
+                "Closing Diagnostics did not return to the stopped page and its error");
     };
 
     draw();
